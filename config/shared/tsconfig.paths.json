@@ -1,6 +1,7 @@
 {
-  "baseUrl": ".",
-  "paths": {
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
     // Local paths (relative to each app/service)
     "@/*": ["./src/*"],
     "@/components/*": ["./src/components/*"],
@@ -32,5 +33,6 @@
     // Client packages
     "@labelmint/api-client": ["../../packages/clients/api-client"],
     "@labelmint/telegram-client": ["../../packages/clients/telegram-client"]
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { body, param } from 'express-validator'
+import { body, param, validationResult } from 'express-validator'
 import { z } from 'zod'
 
 // Zod schemas for validation
@@ -192,17 +192,18 @@ export const validate = (schema: z.ZodSchema) => {
 }
 
 // Validation result handler
-export const handleValidationErrors = (req: any, res: any, next: any) => {
+export const handleValidationErrors = (req: any, res: any, next: any): void => {
   const errors = validationResult(req)
   if (!errors.isEmpty()) {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Validation failed',
-      details: errors.array().map(error => ({
+      details: errors.array().map((error: any) => ({
         field: error.param,
         message: error.msg,
         value: error.value
       }))
     })
+    return
   }
   next()
 }

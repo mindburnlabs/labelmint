@@ -107,14 +107,15 @@ export const validateCreateTeam = [
     .optional()
     .isIn(['owner', 'admin', 'manager', 'lead', 'member', 'viewer'])
     .withMessage('Invalid default role'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -135,14 +136,15 @@ export const validateUpdateTeam = [
     .optional()
     .isURL()
     .withMessage('Avatar must be a valid URL'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -178,10 +180,11 @@ export const validateInviteMember = [
     // Custom validation: ensure either userId or email is provided
     const { userId, email } = req.body
     if (!userId && !email) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Either userId or email must be provided'
       })
+      return
     }
 
     next()
@@ -192,14 +195,15 @@ export const validateUpdateMemberRole = [
   body('role')
     .isIn(['owner', 'admin', 'manager', 'lead', 'member', 'viewer'])
     .withMessage('Invalid role'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -209,14 +213,15 @@ export const validateTransferOwnership = [
   body('newOwnerId')
     .isUUID()
     .withMessage('newOwnerId must be a valid UUID'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -226,14 +231,15 @@ export const validateIdParam = [
   param('id')
     .isUUID()
     .withMessage('Invalid team ID'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -243,14 +249,15 @@ export const validateOrganizationIdParam = [
   param('organizationId')
     .isUUID()
     .withMessage('Invalid organization ID'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -260,14 +267,15 @@ export const validateMemberIdParam = [
   param('memberId')
     .isUUID()
     .withMessage('Invalid member ID'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -295,14 +303,15 @@ export const validateQueryParams = [
     .optional()
     .isIn(['owner', 'admin', 'manager', 'lead', 'member', 'viewer'])
     .withMessage('Invalid role filter'),
-  (req: Request, res: Response, next: NextFunction) => {
+  (req: Request, res: Response, next: NextFunction): void => {
     const errors = validationResult(req)
     if (!errors.isEmpty()) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Validation failed',
         details: errors.array()
       })
+      return
     }
     next()
   }
@@ -310,13 +319,13 @@ export const validateQueryParams = [
 
 // Helper function to validate with Zod
 export function validateWithZod(schema: z.ZodSchema) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
     try {
       schema.parse(req.body)
       next()
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           error: 'Validation failed',
           details: error.errors.map(err => ({
@@ -324,6 +333,7 @@ export function validateWithZod(schema: z.ZodSchema) {
             message: err.message
           }))
         })
+        return
       }
       next(error)
     }

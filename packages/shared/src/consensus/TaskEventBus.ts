@@ -219,7 +219,8 @@ export class TaskEventBus extends EventEmitter {
     await this.publish({
       type: TaskEventType.TASK_CREATED,
       taskId,
-      data
+      data,
+      timestamp: new Date()
     });
   }
 
@@ -231,7 +232,8 @@ export class TaskEventBus extends EventEmitter {
       data: {
         userId,
         assignedAt: new Date()
-      }
+      },
+      timestamp: new Date()
     });
   }
 
@@ -243,7 +245,8 @@ export class TaskEventBus extends EventEmitter {
       data: {
         userId,
         startedAt: new Date()
-      }
+      },
+      timestamp: new Date()
     });
   }
 
@@ -603,6 +606,89 @@ export class TaskEventBus extends EventEmitter {
   static create(): TaskEventBus {
     return new TaskEventBus();
   }
+}
+
+// ============================================================================
+// ADDITIONAL TYPE EXPORTS
+// ============================================================================
+
+export interface LabelSubmission {
+  taskId: string;
+  userId: string;
+  label: any;
+  confidence?: number;
+  timeSpent: number;
+  submittedAt: Date;
+}
+
+export interface ConsensusServiceConfig {
+  requiredSubmissions: number;
+  consensusThreshold: number;
+  honeypotPercentage: number;
+  maxRetries: number;
+  conflictResolutionTimeout: number;
+}
+
+export interface ConsensusMetrics {
+  totalTasks: number;
+  consensusReached: number;
+  conflictsDetected: number;
+  averageConsensusTime: number;
+  averageSubmissionsPerTask: number;
+  honeypotAccuracy: number;
+}
+
+export interface HoneypotTask {
+  taskId: string;
+  expectedAnswer: any;
+  difficulty: 'easy' | 'medium' | 'hard';
+  category: string;
+  createdAt: Date;
+}
+
+export interface HoneypotSubmission {
+  taskId: string;
+  userId: string;
+  submittedAnswer: any;
+  isCorrect: boolean;
+  confidence?: number;
+  timeSpent: number;
+  submittedAt: Date;
+}
+
+export interface HoneypotResult {
+  taskId: string;
+  userId: string;
+  isCorrect: boolean;
+  expectedAnswer: any;
+  submittedAnswer: any;
+  confidence?: number;
+  timeSpent: number;
+  submittedAt: Date;
+}
+
+export interface WorkerHoneypotStats {
+  userId: string;
+  totalHoneypots: number;
+  correctHoneypots: number;
+  accuracy: number;
+  averageTimeSpent: number;
+  lastHoneypotDate?: Date;
+  consecutiveFailures: number;
+  isBlocked: boolean;
+}
+
+export interface HoneypotConfig {
+  enabled: boolean;
+  percentage: number;
+  minTasksBeforeHoneypot: number;
+  blockAfterFailures: number;
+  blockDurationHours: number;
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
 }
 
 // ============================================================================

@@ -6,6 +6,7 @@ import { ScheduledPaymentService } from '../services/payment/ScheduledPaymentSer
 import { StakingService } from '../services/payment/StakingService';
 import { EscrowService } from '../services/payment/EscrowService';
 import { postgresDb } from '../services/database';
+import { notificationService } from '../services/notifications/NotificationService';
 
 export class PaymentCronService {
   private tonService: TonWalletService;
@@ -14,6 +15,7 @@ export class PaymentCronService {
   private scheduledPaymentService: ScheduledPaymentService;
   private stakingService: StakingService;
   private escrowService: EscrowService;
+  private notificationService = notificationService;
 
   constructor() {
     this.tonService = new TonWalletService();
@@ -308,8 +310,20 @@ export class PaymentCronService {
         // Send alert to admin
         console.warn(`Low balance alert: ${result.rows.length} system wallets need attention`);
 
-        // TODO: Send email/Telegram notification to admin
-        // await this.notificationService.sendLowBalanceAlert(result.rows);
+        // Send email/Telegram notification to admin
+        try {
+          const walletAlertData = result.rows.map((row: any) => ({
+            address: row.address,
+            balance: row.balance,
+            currency: row.currency,
+            threshold: row.threshold
+          }));
+
+          await this.notificationService.sendLowBalanceAlert(walletAlertData);
+          console.log(`Low balance notifications sent for ${walletAlertData.length} wallets`);
+        } catch (notificationError) {
+          console.error('Failed to send low balance notifications:', notificationError);
+        }
       }
     } catch (error) {
       console.error('Error checking low balances:', error);

@@ -170,6 +170,257 @@ class TelegramService {
   ready() {
     this.webApp.ready();
   }
+
+  // Share functionality
+  openTelegramLink(url: string) {
+    this.webApp.openTelegramLink(url);
+  }
+
+  openLink(url: string, options?: { try_instant_view?: boolean }) {
+    this.webApp.openLink(url, options);
+  }
+
+  // Sharing and invite
+  shareLink(url: string, text?: string) {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
+    this.openTelegramLink(shareUrl);
+  }
+
+  shareToStory(mediaUrl: string, options?: {
+    text?: string;
+    widget_link?: { url: string; name: string };
+  }) {
+    // Telegram Stories API (available in newer versions)
+    if ((this.webApp as any).shareToStory) {
+      (this.webApp as any).shareToStory(mediaUrl, options);
+    }
+  }
+
+  // Cloud storage (Telegram Cloud)
+  async setCloudStorage(key: string, value: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.webApp.CloudStorage) {
+        this.webApp.CloudStorage.setItem(key, value, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        reject(new Error('CloudStorage not available'));
+      }
+    });
+  }
+
+  async getCloudStorage(key: string): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      if (this.webApp.CloudStorage) {
+        this.webApp.CloudStorage.getItem(key, (error, value) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(value || null);
+          }
+        });
+      } else {
+        reject(new Error('CloudStorage not available'));
+      }
+    });
+  }
+
+  async removeCloudStorage(key: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.webApp.CloudStorage) {
+        this.webApp.CloudStorage.removeItem(key, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        reject(new Error('CloudStorage not available'));
+      }
+    });
+  }
+
+  // Biometric authentication
+  async requestBiometricAuth(reason?: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      if ((this.webApp as any).BiometricManager) {
+        const biometric = (this.webApp as any).BiometricManager;
+        
+        if (!biometric.isInited) {
+          biometric.init();
+        }
+
+        if (!biometric.isBiometricAvailable) {
+          reject(new Error('Biometric authentication not available'));
+          return;
+        }
+
+        biometric.authenticate({ reason }, (success: boolean) => {
+          resolve(success);
+        });
+      } else {
+        reject(new Error('BiometricManager not available'));
+      }
+    });
+  }
+
+  // QR Code scanner
+  async scanQRCode(text?: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (this.webApp.showScanQrPopup) {
+        this.webApp.showScanQrPopup({ text }, (data) => {
+          if (data) {
+            this.webApp.closeScanQrPopup();
+            resolve(data);
+          } else {
+            reject(new Error('QR scan cancelled'));
+          }
+        });
+      } else {
+        reject(new Error('QR scanner not available'));
+      }
+    });
+  }
+
+  // Clipboard
+  async readClipboard(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (this.webApp.readTextFromClipboard) {
+        this.webApp.readTextFromClipboard((text) => {
+          resolve(text || '');
+        });
+      } else {
+        reject(new Error('Clipboard read not available'));
+      }
+    });
+  }
+
+  // Request contact / phone
+  async requestContact(): Promise<{ phone_number: string; first_name: string; last_name?: string; user_id?: number }> {
+    return new Promise((resolve, reject) => {
+      if ((this.webApp as any).requestContact) {
+        (this.webApp as any).requestContact((contact: any) => {
+          if (contact) {
+            resolve(contact);
+          } else {
+            reject(new Error('Contact request cancelled'));
+          }
+        });
+      } else {
+        reject(new Error('Contact request not available'));
+      }
+    });
+  }
+
+  // Request write access for bot
+  async requestWriteAccess(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (this.webApp.requestWriteAccess) {
+        this.webApp.requestWriteAccess((granted) => {
+          resolve(granted);
+        });
+      } else {
+        resolve(false);
+      }
+    });
+  }
+
+  // Switch inline query (for sharing to chats)
+  switchInlineQuery(query: string, chatTypes?: Array<'users' | 'bots' | 'groups' | 'channels'>) {
+    if (this.webApp.switchInlineQuery) {
+      this.webApp.switchInlineQuery(query, chatTypes);
+    }
+  }
+
+  // Send data to bot
+  sendData(data: string) {
+    if (this.webApp.sendData) {
+      this.webApp.sendData(data);
+    }
+  }
+
+  // Platform detection
+  getPlatform(): string {
+    return this.webApp.platform;
+  }
+
+  getVersion(): string {
+    return this.webApp.version;
+  }
+
+  isVersionAtLeast(version: string): boolean {
+    return this.webApp.isVersionAtLeast(version);
+  }
+
+  // Theme colors
+  getThemeParams() {
+    return this.webApp.themeParams;
+  }
+
+  getHeaderColor(): string {
+    return this.webApp.headerColor;
+  }
+
+  setHeaderColor(color: string) {
+    if (this.webApp.setHeaderColor) {
+      this.webApp.setHeaderColor(color);
+    }
+  }
+
+  getBackgroundColor(): string {
+    return this.webApp.backgroundColor;
+  }
+
+  setBackgroundColor(color: string) {
+    if (this.webApp.setBackgroundColor) {
+      this.webApp.setBackgroundColor(color);
+    }
+  }
+
+  // Viewport info
+  getViewportHeight(): number {
+    return this.webApp.viewportHeight;
+  }
+
+  getViewportStableHeight(): number {
+    return this.webApp.viewportStableHeight;
+  }
+
+  isExpanded(): boolean {
+    return this.webApp.isExpanded;
+  }
+
+  // Settings button (for additional options)
+  showSettingsButton(onClick: () => void) {
+    if ((this.webApp as any).SettingsButton) {
+      (this.webApp as any).SettingsButton.onClick(onClick);
+      (this.webApp as any).SettingsButton.show();
+    }
+  }
+
+  hideSettingsButton() {
+    if ((this.webApp as any).SettingsButton) {
+      (this.webApp as any).SettingsButton.hide();
+    }
+  }
+
+  // Download file (if supported)
+  async downloadFile(url: string, filename: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if ((this.webApp as any).downloadFile) {
+        (this.webApp as any).downloadFile({ url, file_name: filename }, (success: boolean) => {
+          resolve(success);
+        });
+      } else {
+        resolve(false);
+      }
+    });
+  }
 }
 
 export const telegramService = new TelegramService();

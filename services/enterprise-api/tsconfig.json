@@ -18,6 +18,7 @@
     "declarationMap": true,
     "sourceMap": true,
     "allowSyntheticDefaultImports": true,
+    "downlevelIteration": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "baseUrl": "./src",

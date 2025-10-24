@@ -191,6 +191,61 @@ export interface StateMetadata {
 }
 
 /**
+ * Label structure for consensus
+ */
+export interface Label {
+  id: string;
+  taskId: string;
+  userId: string;
+  data: any;
+  confidence?: number;
+  submittedAt: Date;
+  isHoneypot?: boolean;
+  expectedAnswer?: any;
+  isCorrect?: boolean;
+}
+
+/**
+ * Consensus calculation result
+ */
+export interface ConsensusResult {
+  taskId: string;
+  consensusReached: boolean;
+  consensusScore: number;
+  finalLabel?: any;
+  conflictingLabels: Label[];
+  agreedLabels: Label[];
+  honeypotResults: HoneypotResult[];
+  requiredSubmissions: number;
+  actualSubmissions: number;
+}
+
+/**
+ * Consensus configuration
+ */
+export interface ConsensusConfig {
+  requiredSubmissions: number;
+  consensusThreshold: number;
+  honeypotPercentage: number;
+  qualityThreshold: number;
+  conflictResolutionStrategy: 'majority_vote' | 'weighted_vote' | 'expert_review';
+}
+
+/**
+ * Honeypot task result
+ */
+export interface HoneypotResult {
+  taskId: string;
+  userId: string;
+  isCorrect: boolean;
+  expectedAnswer: any;
+  submittedAnswer: any;
+  confidence?: number;
+  timeSpent: number;
+  submittedAt: Date;
+}
+
+/**
  * Task state history for audit trail
  */
 export interface TaskStateHistory {
@@ -198,4 +253,16 @@ export interface TaskStateHistory {
   currentState: TaskState;
   history: StateMetadata[];
   lastTransition?: StateTransitionEvent;
+}
+
+/**
+ * State transition entry
+ */
+export interface StateTransition {
+  fromState: TaskState;
+  toState: TaskState;
+  timestamp: Date;
+  userId?: string;
+  reason?: string;
+  metadata?: Record<string, any>;
 }

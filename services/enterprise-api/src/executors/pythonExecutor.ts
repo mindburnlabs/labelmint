@@ -135,16 +135,16 @@ print(json.dumps(result, ensure_ascii=False))
     return new Promise((resolve) => {
       // Python execution with security restrictions
       const pythonProcess = spawn('python3', [
-        '-u',  # Unbuffered output
-        '-B',  # Don't write .pyc files
+        '-u',  // Unbuffered output
+        '-B',  // Don't write .pyc files
         scriptPath
       ], {
         cwd: workDir,
         env: {
           ...process.env,
-          PYTHONPATH: '',  # Clear Python path
-          PYTHONDONTWRITEBYTECODE: '1',  # Don't write bytecode
-          PYTHONUNBUFFERED: '1',  # Unbuffered I/O
+          PYTHONPATH: '',  // Clear Python path
+          PYTHONDONTWRITEBYTECODE: '1',  // Don't write bytecode
+          PYTHONUNBUFFERED: '1',  // Unbuffered I/O
         },
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: this.SCRIPT_TIMEOUT

@@ -6,6 +6,7 @@ const int op::withdraw = 0x5749544844; ;; op code for withdraw
 const int op::create_channel = 0x4348414e4e454c; ;; op code for create payment channel
 const int op::close_channel = 0x434c4f5345; ;; op code for close payment channel
 const int op::channel_payment = 0x4348414e4e454c504159; ;; op code for channel payment
+const int op::get_state = 0x47455453; ;; op code for external state query
 
 ;; Storage variables
 ;; storage#_ owner:MsgAddressInt balance:Coins channel_count:uint32 = Storage;
@@ -185,6 +186,41 @@ const int op::channel_payment = 0x4348414e4e454c504159; ;; op code for channel p
 
 ;; External message for getting info
 () recv_external(slice in_msg) impure {
-    ;; Parse signature and verify
-    throw(0xffff); ;; Not implemented in this demo
+    if (in_msg.slice_empty?()) {
+        return ();
+    }
+
+    int op = in_msg~load_uint(32);
+
+    ;; Only respond to state queries
+    if (op != op::get_state) {
+        return ();
+    }
+
+    if (in_msg.slice_empty?()) {
+        return ();
+    }
+
+    slice response_addr = in_msg~load_msg_addr();
+
+    (_, (int owner, int balance, int channel_count)) = load_data();
+
+    ;; Build payload with current contract state
+    cell payload = begin_cell()
+        .store_uint(op::get_state, 32)
+        .store_slice(parse_std_addr(owner))
+        .store_coins(balance)
+        .store_uint(channel_count, 32)
+        .end_cell();
+
+    ;; Send response back to requester
+    cell msg = begin_cell()
+        .store_uint(0x18, 6) ;; bounceable internal message
+        .store_slice(response_addr)
+        .store_coins(0)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_ref(payload)
+        .end_cell();
+
+    send_raw_message(msg, 3);
 }

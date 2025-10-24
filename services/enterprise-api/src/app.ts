@@ -2,18 +2,18 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import dotenv from 'dotenv'
+import * as dotenv from 'dotenv'
 import { createServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
 import { PrismaClient } from '@prisma/client'
 import Redis from 'ioredis'
-import { logger } from './utils/logger.js'
-import { errorHandler } from './middleware/errorHandler.js'
-import { tenantMiddleware } from './middleware/tenant.js'
-import { authMiddleware } from './middleware/auth.js'
-import { auditMiddleware } from './middleware/audit.js'
-import { setupRoutes } from './routes/index.js'
-import { setupWebSocket } from './services/websocket.js'
+import { logger } from './utils/logger'
+import { errorHandler } from './middleware/errorHandler'
+import { tenantMiddleware } from './middleware/tenant'
+import { authMiddleware } from './middleware/auth'
+import { auditMiddleware } from './middleware/audit'
+import { setupRoutes } from './routes/index'
+import { setupWebSocket } from './services/websocket'
 
 // Load environment variables
 dotenv.config()
@@ -38,10 +38,10 @@ export const prisma = new PrismaClient({
 export const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
+  ...(process.env.REDIS_PASSWORD && { password: process.env.REDIS_PASSWORD }),
   db: parseInt(process.env.REDIS_DB || '0'),
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3
+  maxRetriesPerRequest: 3,
+  lazyConnect: true
 })
 
 // Security middleware
@@ -91,7 +91,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.headers['x-organization-id'] as string || req.ip
+    return (req.headers['x-organization-id'] as string) || req.ip || 'default'
   }
 })
 
@@ -123,12 +123,18 @@ app.use((req, res, next) => {
 })
 
 // Custom middleware
-app.use('/api/enterprise/v1', tenantMiddleware)
-app.use('/api/enterprise/v1', authMiddleware)
-app.use('/api/enterprise/v1', auditMiddleware)
+app.use('/api/enterprise/v1', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  tenantMiddleware(req as any, res, next)
+})
+app.use('/api/enterprise/v1', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  authMiddleware(req as any, res, next)
+})
+app.use('/api/enterprise/v1', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  auditMiddleware(req as any, res, next)
+})
 
 // Health check endpoint
-app.get('/health', async (req, res) => {
+app.get('/health', async (_req, res) => {
   try {
     // Check database connection
     await prisma.$queryRaw`SELECT 1`
@@ -147,7 +153,7 @@ app.get('/health', async (req, res) => {
       version: process.env.npm_package_version || '1.0.0'
     })
   } catch (error) {
-    logger.error('Health check failed', error)
+    logger.error('Health check failed', { error: error instanceof Error ? error.message : String(error) })
     res.status(503).json({
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
@@ -175,7 +181,7 @@ app.use('*', (req, res) => {
 app.use(errorHandler)
 
 // Start server
-const PORT = process.env.PORT || 3003
+const PORT = parseInt(process.env.PORT || '3003')
 const HOST = process.env.HOST || '0.0.0.0'
 
 server.listen(PORT, HOST, () => {

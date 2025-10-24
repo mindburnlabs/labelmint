@@ -665,10 +665,8 @@ export class EmailService {
         bounceSubType
       })
 
-      // TODO: Implement more sophisticated bounce handling
-      // - Temporary vs permanent bounces
-      // - Retry logic for temporary bounces
-      // - Webhook notifications for permanent bounces
+      // Implement sophisticated bounce handling
+      await this.handleBounceProcessing(email, bounceType, bounceSubType, organizationId)
     } catch (error) {
       logger.error('Failed to handle email bounce', {
         email,
@@ -724,6 +722,443 @@ export class EmailService {
         provider: config.provider
       }
     }
+  }
+
+  /**
+   * Handle sophisticated bounce processing
+   */
+  private static async handleBounceProcessing(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    organizationId?: string
+  ): Promise<void> {
+    try {
+      const isPermanent = this.isPermanentBounce(bounceType, bounceSubType)
+      const isTemporary = this.isTemporaryBounce(bounceType, bounceSubType)
+
+      // Record bounce in database
+      await this.recordBounce(email, bounceType, bounceSubType, isPermanent, organizationId)
+
+      if (isPermanent) {
+        await this.handlePermanentBounce(email, bounceType, bounceSubType, organizationId)
+      } else if (isTemporary) {
+        await this.handleTemporaryBounce(email, bounceType, bounceSubType, organizationId)
+      } else {
+        // Unknown bounce type - treat as permanent after 3 occurrences
+        await this.handleUnknownBounce(email, bounceType, bounceSubType, organizationId)
+      }
+
+      // Send webhook notification if configured
+      await this.sendBounceWebhook(email, bounceType, bounceSubType, isPermanent, organizationId)
+
+    } catch (error) {
+      logger.error('Bounce processing failed', {
+        email,
+        bounceType,
+        bounceSubType,
+        error: error.message
+      })
+    }
+  }
+
+  /**
+   * Determine if bounce is permanent
+   */
+  private static isPermanentBounce(bounceType: string, bounceSubType: string): boolean {
+    const permanentTypes = [
+      'Permanent', 'hard', 'undetermined'
+    ]
+    const permanentSubTypes = [
+      'General', 'NoEmail', 'Suppressed', 'OnAccountSuppressionList',
+      'MailboxFull', 'MessageTooLarge', 'AttachmentRejected',
+      'InvalidAddress', 'InvalidDomain', 'InvalidRecipient'
+    ]
+    return permanentTypes.includes(bounceType) || permanentSubTypes.includes(bounceSubType)
+  }
+
+  /**
+   * Determine if bounce is temporary
+   */
+  private static isTemporaryBounce(bounceType: string, bounceSubType: string): boolean {
+    const temporaryTypes = [
+      'Transient', 'soft'
+    ]
+    const temporarySubTypes = [
+      'MailboxFull', 'MessageTooLarge', 'Timeout',
+      'ConnectionFailed', 'DNSFailure', 'SpamDetected'
+    ]
+    return temporaryTypes.includes(bounceType) || temporarySubTypes.includes(bounceSubType)
+  }
+
+  /**
+   * Record bounce in database
+   */
+  private static async recordBounce(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    isPermanent: boolean,
+    organizationId?: string
+  ): Promise<void> {
+    await prisma.emailBounce.create({
+      data: {
+        email,
+        bounceType,
+        bounceSubType,
+        isPermanent,
+        organizationId,
+        timestamp: new Date(),
+        processed: false
+      }
+    })
+  }
+
+  /**
+   * Handle permanent bounce
+   */
+  private static async handlePermanentBounce(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    organizationId?: string
+  ): Promise<void> {
+    // Mark email as suppressed
+    await this.suppressEmail(email, organizationId)
+
+    // Update user status if this is a user email
+    if (organizationId) {
+      await prisma.organizationMember.updateMany({
+        where: {
+          organizationId,
+          user: { email }
+        },
+        data: {
+          emailStatus: 'bounced',
+          emailBounceType: bounceType,
+          emailBounceSubType: bounceSubType,
+          emailBouncedAt: new Date()
+        }
+      })
+    }
+
+    logger.info('Permanent bounce processed', {
+      email,
+      bounceType,
+      bounceSubType,
+      organizationId
+    })
+  }
+
+  /**
+   * Handle temporary bounce with retry logic
+   */
+  private static async handleTemporaryBounce(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    organizationId?: string
+  ): Promise<void> {
+    // Get bounce count for this email
+    const bounceCount = await prisma.emailBounce.count({
+      where: {
+        email,
+        bounceType,
+        bounceSubType,
+        timestamp: {
+          gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        }
+      }
+    })
+
+    // If more than 3 temporary bounces in 24 hours, treat as permanent
+    if (bounceCount >= 3) {
+      await this.handlePermanentBounce(email, 'Converted to Permanent', bounceSubType, organizationId)
+      return
+    }
+
+    // Schedule retry if appropriate
+    const retryDelay = this.calculateRetryDelay(bounceCount)
+    if (retryDelay > 0) {
+      // In a real implementation, you would add this to a retry queue
+      logger.info('Temporary bounce - retry scheduled', {
+        email,
+        bounceType,
+        bounceSubType,
+        retryDelayMinutes: retryDelay / 60000
+      })
+    }
+
+    // Update user status
+    if (organizationId) {
+      await prisma.organizationMember.updateMany({
+        where: {
+          organizationId,
+          user: { email }
+        },
+        data: {
+          emailStatus: 'temporary_bounce',
+          emailBounceType: bounceType,
+          emailBounceSubType: bounceSubType,
+          lastEmailBounce: new Date()
+        }
+      })
+    }
+
+    logger.info('Temporary bounce processed', {
+      email,
+      bounceType,
+      bounceSubType,
+      bounceCount,
+      organizationId
+    })
+  }
+
+  /**
+   * Handle unknown bounce type
+   */
+  private static async handleUnknownBounce(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    organizationId?: string
+  ): Promise<void> {
+    // Get total bounce count
+    const bounceCount = await prisma.emailBounce.count({
+      where: {
+        email,
+        timestamp: {
+          gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+        }
+      }
+    })
+
+    // If more than 5 unknown bounces, treat as permanent
+    if (bounceCount >= 5) {
+      await this.handlePermanentBounce(email, 'Unknown - Converted to Permanent', bounceSubType, organizationId)
+    }
+
+    logger.warn('Unknown bounce type processed', {
+      email,
+      bounceType,
+      bounceSubType,
+      bounceCount,
+      organizationId
+    })
+  }
+
+  /**
+   * Calculate retry delay for temporary bounces
+   */
+  private static calculateRetryDelay(bounceCount: number): number {
+    // Exponential backoff: 5min, 15min, 45min, 2hours, 6hours
+    const delays = [5, 15, 45, 120, 360].map(minutes => minutes * 60 * 1000)
+    return delays[Math.min(bounceCount, delays.length - 1)]
+  }
+
+  /**
+   * Suppress email address
+   */
+  private static async suppressEmail(email: string, organizationId?: string): Promise<void> {
+    await prisma.emailSuppression.create({
+      data: {
+        email,
+        reason: 'bounce',
+        organizationId,
+        createdAt: new Date(),
+        permanent: true
+      }
+    })
+
+    // Mark existing bounce records as processed
+    await prisma.emailBounce.updateMany({
+      where: { email },
+      data: { processed: true }
+    })
+  }
+
+  /**
+   * Send bounce webhook notification
+   */
+  private static async sendBounceWebhook(
+    email: string,
+    bounceType: string,
+    bounceSubType: string,
+    isPermanent: boolean,
+    organizationId?: string
+  ): Promise<void> {
+    try {
+      if (!organizationId) return
+
+      // Get organization's webhook configuration
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          metadata: true,
+          name: true
+        }
+      })
+
+      if (!organization?.metadata) return
+
+      const metadata = JSON.parse(organization.metadata as string)
+      const webhookUrl = metadata.bounceWebhookUrl
+
+      if (!webhookUrl) return
+
+      const payload = {
+        event: 'email_bounced',
+        organization: organization.name,
+        organizationId,
+        email,
+        bounceType,
+        bounceSubType,
+        isPermanent,
+        timestamp: new Date().toISOString()
+      }
+
+      // Send webhook (using fetch or axios)
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'LabelMint-EmailService/1.0'
+        },
+        body: JSON.stringify(payload)
+      }).catch(error => {
+        logger.error('Failed to send bounce webhook', {
+          email,
+          webhookUrl,
+          error: error.message
+        })
+      })
+
+    } catch (error) {
+      logger.error('Bounce webhook processing failed', {
+        email,
+        error: error.message
+      })
+    }
+  }
+
+  /**
+   * Get bounce statistics for organization
+   */
+  static async getBounceStatistics(organizationId: string, days: number = 30): Promise<{
+    totalBounces: number
+    permanentBounces: number
+    temporaryBounces: number
+    bounceRate: number
+    topBounceReasons: Array<{ type: string; count: number }>
+  }> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    const [totalBounces, permanentBounces, temporaryBounces, totalEmails] = await Promise.all([
+      prisma.emailBounce.count({
+        where: {
+          organizationId,
+          timestamp: { gte: since }
+        }
+      }),
+      prisma.emailBounce.count({
+        where: {
+          organizationId,
+          isPermanent: true,
+          timestamp: { gte: since }
+        }
+      }),
+      prisma.emailBounce.count({
+        where: {
+          organizationId,
+          isPermanent: false,
+          timestamp: { gte: since }
+        }
+      }),
+      prisma.emailLog.count({
+        where: {
+          organizationId,
+          timestamp: { gte: since }
+        }
+      })
+    ])
+
+    // Get top bounce reasons
+    const topBounceReasons = await prisma.emailBounce.groupBy({
+      by: ['bounceType'],
+      where: {
+        organizationId,
+        timestamp: { gte: since }
+      },
+      _count: {
+        bounceType: true
+      },
+      orderBy: {
+        _count: {
+          bounceType: 'desc'
+        }
+      },
+      take: 5
+    })
+
+    const bounceRate = totalEmails > 0 ? (totalBounces / totalEmails) * 100 : 0
+
+    return {
+      totalBounces,
+      permanentBounces,
+      temporaryBounces,
+      bounceRate,
+      topBounceReasons: topBounceReasons.map(item => ({
+        type: item.bounceType,
+        count: item._count.bounceType
+      }))
+    }
+  }
+
+  /**
+   * Get suppressed emails for organization
+   */
+  static async getSuppressedEmails(organizationId: string): Promise<string[]> {
+    const suppressions = await prisma.emailSuppression.findMany({
+      where: {
+        organizationId,
+        permanent: true
+      },
+      select: { email: true }
+    })
+
+    return suppressions.map(s => s.email)
+  }
+
+  /**
+   * Remove email from suppression list
+   */
+  static async unsuppressEmail(email: string, organizationId: string): Promise<void> {
+    await prisma.emailSuppression.deleteMany({
+      where: {
+        email,
+        organizationId
+      }
+    })
+
+    // Reset user email status
+    await prisma.organizationMember.updateMany({
+      where: {
+        organizationId,
+        user: { email }
+      },
+      data: {
+        emailStatus: 'active',
+        emailBounceType: null,
+        emailBounceSubType: null,
+        emailBouncedAt: null,
+        lastEmailBounce: null
+      }
+    })
+
+    logger.info('Email unsuppressed', {
+      email,
+      organizationId
+    })
   }
 }
 

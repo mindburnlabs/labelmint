@@ -1,6 +1,75 @@
 import { Request, Response, NextFunction } from 'express'
-import { prisma } from '../app.js'
+import { Prisma } from '@prisma/client'
+import { prisma, redis } from '../app.js'
 import { logger } from '../utils/logger.js'
+
+const STORAGE_USAGE_CACHE_TTL_SECONDS = 300
+export const BYTES_IN_GIGABYTE = 1024 * 1024 * 1024
+
+type StorageSource = {
+  table: string
+  sizeColumn: string
+  organizationColumn: string
+  filters?: string
+}
+
+const STORAGE_SOURCES: StorageSource[] = [
+  {
+    table: 'dataset_files',
+    sizeColumn: 'file_size_bytes',
+    organizationColumn: 'organization_id'
+  },
+  {
+    table: 'project_files',
+    sizeColumn: 'size_bytes',
+    organizationColumn: 'organization_id'
+  },
+  {
+    table: 'project_exports',
+    sizeColumn: 'size_bytes',
+    organizationColumn: 'organization_id'
+  },
+  {
+    table: 'workflow_exports',
+    sizeColumn: 'file_size_bytes',
+    organizationColumn: 'organization_id'
+  },
+  {
+    table: 'attachments',
+    sizeColumn: 'file_size',
+    organizationColumn: 'organization_id'
+  },
+  {
+    table: 'organization_storage_usage',
+    sizeColumn: 'bytes_used',
+    organizationColumn: 'organization_id'
+  }
+]
+
+let prismaClient = prisma
+let redisClient = redis
+
+export function __setTenantTestClients(options: {
+  prisma?: typeof prisma
+  redis?: typeof redis
+}) {
+  if (options.prisma) {
+    prismaClient = options.prisma as any
+  }
+  if (options.redis) {
+    redisClient = options.redis as any
+  }
+}
+
+export function __resetTenantTestClients() {
+  prismaClient = prisma
+  redisClient = redis
+}
+
+export const __debugTenantClients = {
+  getPrisma: () => prismaClient,
+  getRedis: () => redisClient
+}
 
 /**
  * Middleware to ensure proper tenant isolation
@@ -24,7 +93,7 @@ export async function multiTenantMiddleware(
     }
 
     // Verify organization exists and is active
-    const organization = await prisma.organization.findUnique({
+    const organization = await prismaClient.organization.findUnique({
       where: { id: organizationId },
       select: {
         id: true,
@@ -52,7 +121,7 @@ export async function multiTenantMiddleware(
     }
 
     // Check if user is member of the organization
-    const membership = await prisma.organizationMember.findUnique({
+    const membership = await prismaClient.organizationMember.findUnique({
       where: {
         organizationId_userId: {
           organizationId,
@@ -127,7 +196,7 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
 
       switch (limitType) {
         case 'teams':
-          currentUsage = await prisma.team.count({
+          currentUsage = await prismaClient.team.count({
             where: {
               organizationId: organization.id,
               archivedAt: null
@@ -136,7 +205,7 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
           break
 
         case 'users':
-          currentUsage = await prisma.organizationMember.count({
+          currentUsage = await prismaClient.organizationMember.count({
             where: {
               organizationId: organization.id,
               status: 'active'
@@ -145,7 +214,7 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
           break
 
         case 'projects':
-          currentUsage = await prisma.project.count({
+          currentUsage = await prismaClient.project.count({
             where: {
               team: {
                 organizationId: organization.id
@@ -155,10 +224,11 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
           })
           break
 
-        case 'storage':
-          // TODO: Implement storage usage calculation
-          currentUsage = 0
+        case 'storage': {
+          const usageGb = await calculateStorageUsage(organization.id)
+          currentUsage = usageGb
           break
+        }
 
         default:
           logger.warn('Unknown limit type', { limitType })
@@ -186,7 +256,14 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
       req.usage = {
         type: limitType,
         current: currentUsage,
-        limit
+        limit,
+        unit: limitType === 'storage' ? 'GB' : 'count',
+        metadata: limitType === 'storage'
+          ? {
+              bytes: Math.round(currentUsage * BYTES_IN_GIGABYTE),
+              calculatedAt: new Date().toISOString()
+            }
+          : undefined
       }
 
       next()
@@ -201,6 +278,111 @@ export function checkSubscriptionLimit(limitType: string, limitName?: string) {
     }
   }
 }
+
+async function calculateStorageUsage(organizationId: string): Promise<number> {
+  const cacheKey = `org:${organizationId}:storage-usage`
+  const cached = await redisClient.get(cacheKey)
+  if (cached) {
+    const cachedValue = parseFloat(cached)
+    if (!Number.isNaN(cachedValue)) {
+      return cachedValue
+    }
+  }
+
+  let totalBytes = 0
+
+  for (const source of STORAGE_SOURCES) {
+    totalBytes += await sumStorageFromSource(source, organizationId)
+  }
+
+  // Ensure non-negative
+  totalBytes = Math.max(0, totalBytes)
+
+  const usageGb = totalBytes / BYTES_IN_GIGABYTE
+
+  await redisClient.setex(
+    cacheKey,
+    STORAGE_USAGE_CACHE_TTL_SECONDS,
+    usageGb.toString()
+  ).catch(error => {
+    logger.warn('Failed to cache storage usage', {
+      organizationId,
+      error: error.message
+    })
+  })
+
+  return usageGb
+}
+
+async function sumStorageFromSource(
+  source: StorageSource,
+  organizationId: string,
+  client: typeof prismaClient = prismaClient
+): Promise<number> {
+  try {
+    const exists = await tableExists(source.table, client)
+    if (!exists) {
+      return 0
+    }
+
+    let whereClause = Prisma.sql`${Prisma.raw(source.organizationColumn)} = ${organizationId}`
+    if (source.filters) {
+      whereClause = Prisma.sql`${whereClause} AND ${Prisma.raw(source.filters)}`
+    }
+
+    const query = Prisma.sql`
+      SELECT COALESCE(SUM(${Prisma.raw(source.sizeColumn)}), 0) AS total
+      FROM ${Prisma.raw(source.table)}
+      WHERE ${whereClause}
+    `
+
+    const rows = await client.$queryRaw<{ total: bigint | number | null }[]>(query)
+
+    const value = rows?.[0]?.total ?? 0
+    if (typeof value === 'bigint') {
+      return Number(value)
+    }
+    return Number(value) || 0
+  } catch (error) {
+    logger.warn('Failed to fetch storage usage from source', {
+      table: source.table,
+      error: error.message
+    })
+    return 0
+  }
+}
+
+async function tableExists(
+  tableName: string,
+  client: typeof prismaClient = prismaClient
+): Promise<boolean> {
+  try {
+    const result = await client.$queryRaw<{ exists: boolean }[]>(Prisma.sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name = ${tableName}
+      ) AS exists
+    `)
+
+    return Boolean(result?.[0]?.exists)
+  } catch (error) {
+    logger.warn('Failed to determine table existence', {
+      tableName,
+      error: error.message
+    })
+    return false
+  }
+}
+
+export const __storageUtils = {
+  calculateStorageUsage,
+  sumStorageFromSource,
+  tableExists
+}
+
+export { calculateStorageUsage }
 
 /**
  * Middleware to enforce tenant data isolation at query level
@@ -234,13 +416,13 @@ export class TenantQueryInterceptor {
 
     // Store original methods if not already stored
     if (!instance.originalFindMany) {
-      instance.originalFindMany = prisma['team']?.findMany
-      instance.originalFindFirst = prisma['team']?.findFirst
-      instance.originalFindUnique = prisma['team']?.findUnique
-      instance.originalCreate = prisma['team']?.create
-      instance.originalUpdate = prisma['team']?.update
-      instance.originalDelete = prisma['team']?.delete
-      instance.originalCount = prisma['team']?.count
+      instance.originalFindMany = prismaClient['team']?.findMany
+      instance.originalFindFirst = prismaClient['team']?.findFirst
+      instance.originalFindUnique = prismaClient['team']?.findUnique
+      instance.originalCreate = prismaClient['team']?.create
+      instance.originalUpdate = prismaClient['team']?.update
+      instance.originalDelete = prismaClient['team']?.delete
+      instance.originalCount = prismaClient['team']?.count
     }
 
     // Override methods to add tenant filters
@@ -254,20 +436,20 @@ export class TenantQueryInterceptor {
     const instance = this.getInstance()
 
     // Restore original methods
-    if (instance.originalFindMany && prisma['team']) {
-      prisma['team'].findMany = instance.originalFindMany
-      prisma['team'].findFirst = instance.originalFindFirst
-      prisma['team'].findUnique = instance.originalFindUnique
-      prisma['team'].create = instance.originalCreate
-      prisma['team'].update = instance.originalUpdate
-      prisma['team'].delete = instance.originalDelete
-      prisma['team'].count = instance.originalCount
+    if (instance.originalFindMany && prismaClient['team']) {
+      prismaClient['team'].findMany = instance.originalFindMany
+      prismaClient['team'].findFirst = instance.originalFindFirst
+      prismaClient['team'].findUnique = instance.originalFindUnique
+      prismaClient['team'].create = instance.originalCreate
+      prismaClient['team'].update = instance.originalUpdate
+      prismaClient['team'].delete = instance.originalDelete
+      prismaClient['team'].count = instance.originalCount
     }
   }
 
   private static addTenantFilters(organizationId: string): void {
     // Add tenant filters to team model queries
-    const teamModel = prisma['team']
+    const teamModel = prismaClient['team']
     if (!teamModel) return
 
     // Override findMany
@@ -383,6 +565,8 @@ declare global {
         type: string
         current: number
         limit: number
+        unit?: string
+        metadata?: Record<string, any>
       }
     }
   }

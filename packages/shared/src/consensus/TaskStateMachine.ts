@@ -11,6 +11,9 @@ import {
   canCalculateConsensus
 } from './TaskState';
 
+// Re-export for use in other modules
+export { TaskState, TransitionContext, StateTransitionEvent, InvalidStateTransition };
+
 // ============================================================================
 // LABEL AND CONSENSUS TYPES
 // ============================================================================
@@ -526,3 +529,39 @@ interface StateTransition {
   timestamp: Date;
   context: TransitionContext;
 }
+
+// Export constants for use in other modules
+export const STATE_TRANSITIONS = {
+  [TaskState.CREATED]: [TaskState.ASSIGNED, TaskState.CANCELLED, TaskState.EXPIRED],
+  [TaskState.ASSIGNED]: [TaskState.IN_PROGRESS, TaskState.CANCELLED, TaskState.EXPIRED, TaskState.FAILED],
+  [TaskState.IN_PROGRESS]: [TaskState.PENDING_REVIEW, TaskState.CANCELLED, TaskState.EXPIRED, TaskState.FAILED],
+  [TaskState.PENDING_REVIEW]: [TaskState.CONSENSUS_REACHED, TaskState.CONFLICT_DETECTED, TaskState.UNDER_DISPUTE],
+  [TaskState.CONSENSUS_REACHED]: [TaskState.COMPLETED],
+  [TaskState.CONFLICT_DETECTED]: [TaskState.ASSIGNED, TaskState.UNDER_DISPUTE],
+  [TaskState.UNDER_DISPUTE]: [TaskState.RESOLVED, TaskState.CONFLICT_DETECTED],
+  [TaskState.RESOLVED]: [TaskState.COMPLETED],
+  [TaskState.COMPLETED]: [],
+  [TaskState.CANCELLED]: [],
+  [TaskState.EXPIRED]: [TaskState.CREATED],
+  [TaskState.FAILED]: [TaskState.CREATED]
+};
+
+export const TERMINAL_STATES = new Set([
+  TaskState.COMPLETED,
+  TaskState.CANCELLED
+]);
+
+export const ACTIVE_STATES = new Set([
+  TaskState.CREATED,
+  TaskState.ASSIGNED,
+  TaskState.IN_PROGRESS,
+  TaskState.PENDING_REVIEW,
+  TaskState.CONFLICT_DETECTED,
+  TaskState.UNDER_DISPUTE
+]);
+
+export const CONSENSUS_STATES = new Set([
+  TaskState.PENDING_REVIEW,
+  TaskState.CONFLICT_DETECTED,
+  TaskState.UNDER_DISPUTE
+]);

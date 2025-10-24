@@ -10,28 +10,27 @@ export * from './ConsensusService';
 export * from './HoneypotTaskHandler';
 
 // Re-export commonly used types
-export {
+export type {
   TaskState,
-  STATE_TRANSITIONS,
-  TERMINAL_STATES,
-  ACTIVE_STATES,
-  CONSENSUS_STATES,
   InvalidStateTransition,
   TransitionContext,
   StateTransitionEvent,
   StateMetadata,
-  TaskStateHistory
+  TaskStateHistory,
+  Label,
+  ConsensusResult,
+  ConsensusConfig
 } from './TaskState';
 
 export {
   TaskStateMachine,
-  Label,
-  ConsensusResult,
-  ConsensusConfig
+  STATE_TRANSITIONS,
+  TERMINAL_STATES,
+  ACTIVE_STATES,
+  CONSENSUS_STATES
 } from './TaskStateMachine';
 
-export {
-  TaskEventBus,
+export type {
   TaskEventType,
   TaskEvent,
   TaskCreatedEvent,
@@ -46,24 +45,27 @@ export {
   HoneypotFailedEvent,
   HoneypotPassedEvent,
   WorkerAccuracyUpdatedEvent,
-  WorkerTrustUpdatedEvent,
   EventHandler,
   EventSubscription,
-  globalTaskEventBus
-} from './TaskEventBus';
-
-export {
-  ConsensusService,
   LabelSubmission,
   ConsensusServiceConfig,
-  ConsensusMetrics
-} from './ConsensusService';
-
-export {
-  HoneypotTaskHandler,
+  ConsensusMetrics,
   HoneypotTask,
   HoneypotSubmission,
   HoneypotResult,
   WorkerHoneypotStats,
   HoneypotConfig
+} from './TaskEventBus';
+
+export {
+  TaskEventBus,
+  globalTaskEventBus
+} from './TaskEventBus';
+
+export {
+  ConsensusService
+} from './ConsensusService';
+
+export {
+  HoneypotTaskHandler
 } from './HoneypotTaskHandler';

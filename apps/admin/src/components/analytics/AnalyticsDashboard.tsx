@@ -1,256 +1,379 @@
-'use client';
+import React, { useState, useEffect } from 'react';
+import { Card } from '@labelmint/ui/components/Card';
+import { Button } from '@labelmint/ui/components/Button';
+import { Select } from '@labelmint/ui/components/Select';
+import { DatePicker } from '@labelmint/ui/components/DatePicker';
+import { Badge } from '@labelmint/ui/components/Badge';
+import { 
+  AnalyticsService, 
+  AnalyticsOverview, 
+  UserMetrics, 
+  ProjectMetrics, 
+  TaskMetrics, 
+  FinancialMetrics, 
+  SystemMetrics,
+  AnalyticsFilters 
+} from '../../lib/analyticsService';
 
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import {
-  BarChart3,
-  Download,
-  Calendar,
-  Filter,
-  TrendingUp,
-  Users,
-  DollarSign,
-  Activity,
-  FileText,
-} from 'lucide-react';
-import { dashboardApi } from '@/lib/api';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Select } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { LineChart } from '@/components/charts/LineChart';
-import { BarChart } from '@/components/charts/BarChart';
-import { PieChart } from '@/components/charts/PieChart';
-import { HeatMap } from '@/components/charts/HeatMap';
-
-interface AnalyticsFilters {
-  dateRange: '7d' | '30d' | '90d' | '1y';
-  projectType: string;
-  userRole: 'all' | 'clients' | 'workers';
+export interface AnalyticsDashboardProps {
+  className?: string;
 }
 
-export function AnalyticsDashboard() {
+export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
+  className = ''
+}) => {
   const [filters, setFilters] = useState<AnalyticsFilters>({
-    dateRange: '30d',
-    projectType: 'all',
-    userRole: 'all',
+    dateRange: {
+      start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0]
+    }
   });
 
-  const { data: analytics, isLoading, refetch } = useQuery({
-    queryKey: ['analytics', filters],
-    queryFn: () => dashboardApi.getAnalytics(filters),
-    refetchInterval: 60000, // Refresh every minute
+  const [data, setData] = useState<{
+    overview: AnalyticsOverview | null;
+    userMetrics: UserMetrics | null;
+    projectMetrics: ProjectMetrics | null;
+    taskMetrics: TaskMetrics | null;
+    financialMetrics: FinancialMetrics | null;
+    systemMetrics: SystemMetrics | null;
+    realtime: any;
+  }>({
+    overview: null,
+    userMetrics: null,
+    projectMetrics: null,
+    taskMetrics: null,
+    financialMetrics: null,
+    systemMetrics: null,
+    realtime: null
   });
 
-  const handleExport = async (format: 'csv' | 'json' | 'pdf') => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+
     try {
-      const data = await dashboardApi.exportAnalytics({ ...filters, format });
-      const blob = new Blob([data], {
-        type: format === 'csv' ? 'text/csv' : format === 'json' ? 'application/json' : 'application/pdf',
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `analytics-${filters.dateRange}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
+      const analyticsService = new AnalyticsService({} as any); // Replace with actual API client
+      const dashboardData = await analyticsService.getDashboardData(filters);
+      setData(dashboardData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load analytics data');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const metrics = useMemo(() => {
-    if (!analytics) return null;
+  useEffect(() => {
+    loadData();
+  }, [filters]);
 
-    return {
-      totalRevenue: analytics.revenue.reduce((sum, r) => sum + r.value, 0),
-      avgSessionDuration: analytics.userActivity.reduce((sum, a) => sum + a.duration, 0) / analytics.userActivity.length,
-      completionRate: (analytics.completedTasks / analytics.totalTasks * 100).toFixed(1),
-      activeUsers: analytics.users.filter(u => u.lastActive > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length,
-    };
-  }, [analytics]);
+  const handleDateRangeChange = (start: string, end: string) => {
+    setFilters(prev => ({
+      ...prev,
+      dateRange: { start, end }
+    }));
+  };
+
+  const handleProjectFilter = (projectId: string) => {
+    setFilters(prev => ({
+      ...prev,
+      projectId: projectId ? parseInt(projectId) : undefined
+    }));
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat('en-US').format(num);
+  };
+
+  const formatPercentage = (num: number) => {
+    return `${(num * 100).toFixed(1)}%`;
+  };
+
+  if (error) {
+    return (
+      <div className={`analytics-dashboard ${className}`}>
+        <Card className="p-6">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-red-600 mb-2">Error Loading Analytics</h2>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={loadData}>Retry</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Filters and Export */}
-      <Card className="p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Select
-              value={filters.dateRange}
-              onValueChange={(value) => setFilters(prev => ({ ...prev, dateRange: value as any }))}
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-              <option value="1y">Last year</option>
-            </Select>
-
-            <Select
-              value={filters.projectType}
-              onValueChange={(value) => setFilters(prev => ({ ...prev, projectType: value }))}
-            >
-              <option value="all">All Projects</option>
-              <option value="image_classification">Image Classification</option>
-              <option value="text_annotation">Text Annotation</option>
-              <option value="transcription">Transcription</option>
-              <option value="rlhf">RLHF</option>
-            </Select>
-
-            <Select
-              value={filters.userRole}
-              onValueChange={(value) => setFilters(prev => ({ ...prev, userRole: value as any }))}
-            >
-              <option value="all">All Users</option>
-              <option value="clients">Clients</option>
-              <option value="workers">Workers</option>
-            </Select>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport('csv')}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport('json')}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export JSON
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleExport('pdf')}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export PDF
-            </Button>
-          </div>
+    <div className={`analytics-dashboard ${className}`}>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
+        <div className="flex gap-4">
+          <DatePicker
+            value={filters.dateRange.start}
+            onChange={(date) => handleDateRangeChange(date, filters.dateRange.end)}
+            placeholder="Start Date"
+          />
+          <DatePicker
+            value={filters.dateRange.end}
+            onChange={(date) => handleDateRangeChange(filters.dateRange.start, date)}
+            placeholder="End Date"
+          />
+          <Select
+            value={filters.projectId?.toString() || ''}
+            onValueChange={handleProjectFilter}
+          >
+            <option value="">All Projects</option>
+            {/* Project options would be populated here */}
+          </Select>
+          <Button onClick={loadData} disabled={isLoading}>
+            {isLoading ? 'Loading...' : 'Refresh'}
+          </Button>
         </div>
-      </Card>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
-          title="Total Revenue"
-          value={`$${metrics?.totalRevenue.toLocaleString() || '0'}`}
-          change={12.5}
-          icon={<DollarSign className="h-5 w-5" />}
-          trend="up"
-        />
-        <MetricCard
-          title="Active Users"
-          value={metrics?.activeUsers.toLocaleString() || '0'}
-          change={8.2}
-          icon={<Users className="h-5 w-5" />}
-          trend="up"
-        />
-        <MetricCard
-          title="Completion Rate"
-          value={`${metrics?.completionRate || '0'}%`}
-          change={2.4}
-          icon={<Activity className="h-5 w-5" />}
-          trend="up"
-        />
-        <MetricCard
-          title="Avg Session Duration"
-          value={`${Math.round(metrics?.avgSessionDuration || 0)}m`}
-          change={-5.1}
-          icon={<Calendar className="h-5 w-5" />}
-          trend="down"
-        />
       </div>
 
-      {/* Revenue Chart */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Revenue Trend</h3>
-        <LineChart
-          data={analytics?.revenue || []}
-          lines={[{ dataKey: 'value', stroke: '#3b82f6', name: 'Revenue' }]}
-          height={300}
-        />
-      </Card>
-
-      {/* Project Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Projects by Type</h3>
-          <PieChart
-            data={analytics?.projectTypes || []}
-            height={300}
-          />
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold mb-4">User Activity Heatmap</h3>
-          <HeatMap
-            data={analytics?.activityHeatmap || []}
-            height={300}
-          />
-        </Card>
-      </div>
-
-      {/* Top Performers */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Top Workers</h3>
-        <div className="space-y-4">
-          {analytics?.topWorkers?.slice(0, 10).map((worker, index) => (
-            <div key={worker.id} className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Badge variant="outline">#{index + 1}</Badge>
-                <div>
-                  <p className="font-medium">{worker.name}</p>
-                  <p className="text-sm text-gray-500">{worker.tasksCompleted} tasks</p>
-                </div>
+      {/* Overview Cards */}
+      {data.overview && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Users</p>
+                <p className="text-2xl font-bold">{formatNumber(data.overview.totalUsers)}</p>
               </div>
-              <div className="text-right">
-                <p className="font-medium">${worker.earnings.toLocaleString()}</p>
-                <p className="text-sm text-gray-500">{worker.accuracy}% accuracy</p>
+              <div className="text-2xl">👥</div>
+            </div>
+            <div className="mt-2">
+              <Badge variant="secondary">
+                {formatNumber(data.overview.activeUsers)} active
+              </Badge>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Revenue</p>
+                <p className="text-2xl font-bold">{formatCurrency(data.overview.totalRevenue)}</p>
+              </div>
+              <div className="text-2xl">💰</div>
+            </div>
+            <div className="mt-2">
+              <Badge variant="secondary">
+                {formatCurrency(data.overview.monthlyRevenue)} this month
+              </Badge>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Tasks</p>
+                <p className="text-2xl font-bold">{formatNumber(data.overview.totalTasks)}</p>
+              </div>
+              <div className="text-2xl">📋</div>
+            </div>
+            <div className="mt-2">
+              <Badge variant="secondary">
+                {formatNumber(data.overview.completedTasks)} completed
+              </Badge>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Quality Score</p>
+                <p className="text-2xl font-bold">{data.overview.avgQualityScore.toFixed(1)}</p>
+              </div>
+              <div className="text-2xl">⭐</div>
+            </div>
+            <div className="mt-2">
+              <Badge variant="secondary">
+                {formatPercentage(1 - data.overview.disputeRate)} success rate
+              </Badge>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Detailed Metrics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* User Metrics */}
+        {data.userMetrics && (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold mb-4">User Metrics</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>New Users</span>
+                <span className="font-medium">{formatNumber(data.userMetrics.newUsers)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Active Users</span>
+                <span className="font-medium">{formatNumber(data.userMetrics.activeUsers)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Returning Users</span>
+                <span className="font-medium">{formatNumber(data.userMetrics.returningUsers)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Avg Session Duration</span>
+                <span className="font-medium">
+                  {Math.floor(data.userMetrics.userEngagement.avgSessionDuration / 60)}m
+                </span>
               </div>
             </div>
-          ))}
-        </div>
-      </Card>
+          </Card>
+        )}
+
+        {/* Project Metrics */}
+        {data.projectMetrics && (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Project Metrics</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Active Projects</span>
+                <span className="font-medium">{formatNumber(data.projectMetrics.activeProjects)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Completed Projects</span>
+                <span className="font-medium">{formatNumber(data.projectMetrics.completedProjects)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Avg Duration</span>
+                <span className="font-medium">
+                  {Math.floor(data.projectMetrics.avgProjectDuration / 24)} days
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Success Rate</span>
+                <span className="font-medium">{formatPercentage(data.projectMetrics.projectSuccessRate)}</span>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Task Metrics */}
+        {data.taskMetrics && (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Task Metrics</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Pending Tasks</span>
+                <span className="font-medium">{formatNumber(data.taskMetrics.pendingTasks)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Completed Tasks</span>
+                <span className="font-medium">{formatNumber(data.taskMetrics.completedTasks)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Avg Completion Time</span>
+                <span className="font-medium">
+                  {Math.floor(data.taskMetrics.avgCompletionTime / 60)}m
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Failed Tasks</span>
+                <span className="font-medium">{formatNumber(data.taskMetrics.failedTasks)}</span>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Financial Metrics */}
+        {data.financialMetrics && (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Financial Metrics</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span>Monthly Revenue</span>
+                <span className="font-medium">{formatCurrency(data.financialMetrics.monthlyRevenue)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Earnings</span>
+                <span className="font-medium">{formatCurrency(data.financialMetrics.totalEarnings)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Platform Fee</span>
+                <span className="font-medium">{formatCurrency(data.financialMetrics.platformFee)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Avg Transaction</span>
+                <span className="font-medium">{formatCurrency(data.financialMetrics.avgTransactionValue)}</span>
+              </div>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* System Metrics */}
+      {data.systemMetrics && (
+        <Card className="p-6 mt-6">
+          <h3 className="text-lg font-semibold mb-4">System Metrics</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <h4 className="font-medium mb-2">Performance</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Uptime</span>
+                  <span>{formatPercentage(data.systemMetrics.uptime)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Response Time</span>
+                  <span>{data.systemMetrics.responseTime}ms</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Error Rate</span>
+                  <span>{formatPercentage(data.systemMetrics.errorRate)}</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">API Metrics</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Total Requests</span>
+                  <span>{formatNumber(data.systemMetrics.apiMetrics.totalRequests)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Success Rate</span>
+                  <span>{formatPercentage(data.systemMetrics.apiMetrics.successRate)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Avg Response</span>
+                  <span>{data.systemMetrics.apiMetrics.avgResponseTime}ms</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-medium mb-2">Resource Usage</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>CPU</span>
+                  <span>{formatPercentage(data.systemMetrics.resourceUsage.cpu)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Memory</span>
+                  <span>{formatPercentage(data.systemMetrics.resourceUsage.memory)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Storage</span>
+                  <span>{formatPercentage(data.systemMetrics.resourceUsage.storage)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
-}
-
-interface MetricCardProps {
-  title: string;
-  value: string;
-  change: number;
-  icon: React.ReactNode;
-  trend: 'up' | 'down';
-}
-
-function MetricCard({ title, value, change, icon, trend }: MetricCardProps) {
-  return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold">{value}</p>
-          <div className={`flex items-center gap-1 mt-1 ${trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-            <TrendingUp className={`h-4 w-4 ${trend === 'down' ? 'rotate-180' : ''}`} />
-            <span className="text-sm">{Math.abs(change)}%</span>
-          </div>
-        </div>
-        <div className="text-gray-400">
-          {icon}
-        </div>
-      </div>
-    </Card>
-  );
-}
+};

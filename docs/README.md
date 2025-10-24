@@ -1,124 +1,279 @@
-# LabelMint Documentation
+# 📚 LabelMint Documentation Hub
 
-LabelMint is a Telegram-based data labeling platform that enables businesses to create labeling tasks and workers to complete them for TON/USDT rewards.
+Comprehensive documentation for the LabelMint data labeling platform - a modern, scalable solution built for enterprise-grade data annotation with Telegram integration and TON blockchain payments.
 
-## Table of Contents
+## 🎯 Quick Navigation
 
-1. [Architecture Overview](#architecture-overview)
-2. [Getting Started](#getting-started)
-3. [API Documentation](#api-documentation)
-4. [Deployment Guide](#deployment-guide)
-5. [Configuration](#configuration)
-6. [Contributing](#contributing)
+### 🚀 Getting Started
+- [**Main README**](../README.md) - Platform overview and quick start
+- [**Setup Guide**](./SETUP.md) - Complete installation and configuration
+- [**Development Guide**](./DEVELOPMENT.md) - Development workflow and standards
+- [**Architecture Overview**](./ARCHITECTURE.md) - System design and patterns
 
-## Architecture Overview
+### 🏗️ Platform Components
+- [**Applications**](../apps/README.md) - Web, Admin, and Telegram Mini Apps
+- [**Services**](../services/README.md) - Backend microservices architecture
+- [**Infrastructure**](../infrastructure/README.md) - Cloud and container infrastructure
+- [**Configuration**](../config/README.md) - Centralized configuration management
+
+### 🔧 Technical Documentation
+- [**API Documentation**](./api/README.md) - REST API and WebSocket endpoints
+- [**Security Guide**](./SECURITY.md) - Security policies and best practices
+- [**Configuration Guide**](./CONFIGURATION.md) - Environment and service configuration
+- [**Deployment Guide**](./DEPLOYMENT.md) - Production deployment procedures
+
+### 📋 Operations & Runbooks
+- [**Operations Runbooks**](./runbooks/README.md) - Operational procedures and troubleshooting
+- [**Incident Response**](./runbooks/incident-response.md) - Incident management procedures
+- [**Scaling Procedures**](./runbooks/scaling-procedures.md) - System scaling guidelines
+- [**Database Maintenance**](./runbooks/database-maintenance.md) - Database operations
+
+## 📖 Documentation Structure
+
+```
+docs/
+├── README.md                    # This file - Documentation hub
+├── ARCHITECTURE.md              # System architecture and design
+├── SETUP.md                     # Installation and setup guide
+├── DEVELOPMENT.md               # Development workflow and standards
+├── CONFIGURATION.md             # Configuration management
+├── DEPLOYMENT.md                # Production deployment guide
+├── SECURITY.md                  # Security policies and procedures
+├── API/                         # API Documentation
+│   ├── README.md               # API overview and authentication
+│   ├── tasks.md                # Tasks API endpoints
+│   ├── rate-limiting.md        # API rate limiting policies
+│   └── versioning-strategy.md  # API versioning approach
+├── DEPLOYMENT/                  # Deployment Documentation
+│   ├── README.md               # Deployment overview
+│   └── production.md           # Production deployment details
+├── RUNBOOKS/                    # Operational Procedures
+│   ├── README.md               # Operations overview
+│   ├── incident-response.md    # Incident management
+│   ├── database-maintenance.md # Database operations
+│   ├── scaling-procedures.md   # System scaling
+│   ├── backup-restoration.md   # Backup and recovery
+│   └── security-incidents.md   # Security incident response
+└── ARCHITECTURE/                # Technical Architecture
+    └── overview.md             # Architecture deep dive
+```
+
+## 🎯 Platform Overview
+
+LabelMint is a comprehensive data labeling platform that combines:
+
+### 🤖 Telegram Integration
+- **Seamless User Experience** through familiar Telegram interface
+- **Mobile-First Design** optimized for smartphone usage
+- **Real-time Notifications** for task updates and payments
+- **Bot Management** for client and worker interactions
+
+### 💰 Blockchain Payments
+- **TON Network Integration** for fast, low-cost transactions
+- **USDT Stablecoin** payments for price stability
+- **Smart Contract Escrow** for secure payment handling
+- **Automated Withdrawals** with transparent tracking
+
+### 🏗️ Scalable Architecture
+- **Microservices Design** for independent scaling
+- **Multi-tenant Support** for enterprise clients
+- **Real-time Analytics** for performance monitoring
+- **API-First Approach** for easy integration
+
+### 🔒 Enterprise Security
+- **End-to-end Encryption** for data protection
+- **Role-Based Access Control** (RBAC)
+- **Audit Logging** for compliance
+- **SOC 2 Type II** certified infrastructure
+
+## 🚀 Quick Start Guide
+
+### Prerequisites
+- **Node.js** 18+ and pnpm package manager
+- **Docker** and Docker Compose
+- **Telegram Bot Tokens** (from @BotFather)
+- **TON Wallet** for payment processing
+- **Supabase CLI** (for database management)
+
+### 5-Minute Setup
+
+1. **Clone Repository**
+   ```bash
+   git clone https://github.com/your-org/labelmint.git
+   cd labelmint
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   pnpm install
+   ```
+
+3. **Setup Environment**
+   ```bash
+   cp .env.example .env.local
+   # Configure your environment variables
+   ```
+
+4. **Start Services**
+   ```bash
+   pnpm run dev
+   ```
+
+5. **Access Applications**
+   - **Web App**: http://localhost:3000
+   - **Admin Panel**: http://localhost:3001
+   - **API Documentation**: http://localhost:3104/docs
+
+## 🏗️ Architecture Overview
 
 ### System Components
 
 ```
-┌─────────────────┐    ┌─────────────────┐
-│   Client Bot    │    │  Worker Bot     │
-│  (@LabelMintBot)│    │(@LabelMintWrkr)│
-└─────────┬───────┘    └─────────┬───────┘
-          │                      │
-          ▼                      ▼
-┌─────────────────────────────────────────────┐
-│           Backend API Server               │
-│  - Task Assignment                         │
-│  - Consensus Algorithm                     │
-│  - Payment Processing                      │
-│  - WebSocket Notifications                 │
-└─────────────────┬───────────────────────────┘
-                  │
-        ┌─────────┴─────────┐
-        ▼                   ▼
-┌─────────────┐    ┌─────────────────┐
-│ PostgreSQL  │    │      Redis      │
-│   Database  │    │   Cache & Queue │
-└─────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Client    │    │   Admin Panel   │    │  Telegram Mini  │
+│                 │    │                 │    │      App        │
+│ • Progressive   │    │ • Enterprise    │    │ • Mobile-first  │
+│   Web App       │    │   Dashboard     │    │ • Bot Integration│
+│ • Desktop &     │    │ • Analytics     │    │ • Task Labels   │
+│   Mobile        │    │ • User Mgmt     │    │ • Earnings      │
+│ • PWA Features  │    │ • Financials    │    │ • Gamification  │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │
+          └──────────────────────┼──────────────────────┘
+                                 │
+                    ┌─────────────▼─────────────┐
+                    │     API Gateway          │
+                    │  (Authentication &       │
+                    │   Request Routing)       │
+                    └─────────────┬─────────────┘
+                                 │
+    ┌────────────────────────────┼────────────────────────────┐
+    │                            │                            │
+┌───▼────┐    ┌───────────┐    ┌────▼────┐    ┌─────────────┐
+│ Bots   │    │ Labeling  │    │ Payment  │    │ Analytics   │
+│ Service│    │ Backend   │    │ Backend   │    │ Engine      │
+└────────┘    └───────────┘    └───────────┘    └─────────────┘
+    │                 │                 │                 │
+    ▼                 ▼                 ▼                 ▼
+┌─────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Redis   │    │ PostgreSQL  │    │ TON Network │    │ ClickHouse  │
+│ (Queue) │    │ (Database)  │    │ (Blockchain)│    │ (Analytics) │
+└─────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
-### Frontend Applications
+### Technology Stack
 
-- **Web Dashboard** (`https://labelmint.mindburn.org`)
-  - Project management interface
-  - Analytics and reporting
-  - Payment and billing
+| Layer | Technology | Purpose |
+|-------|-------------|---------|
+| **Frontend** | Next.js 15, React 19, TypeScript | Web applications |
+| **Mobile** | Telegram Web App SDK, React 19 | Mobile experience |
+| **Backend** | Node.js, Express, TypeScript | API services |
+| **Database** | PostgreSQL 15, Redis 7 | Data storage & caching |
+| **Blockchain** | TON SDK, Smart Contracts | Payment processing |
+| **Infrastructure** | Docker, Kubernetes, AWS | Deployment & scaling |
+| **Monitoring** | Prometheus, Grafana, Sentry | Observability |
 
-- **Telegram Mini Apps**
-  - Client App (`https://app.labelmint.mindburn.org`)
-  - Worker App (`https://workers.labelmint.mindburn.org`)
+## 🔧 Development Workflow
 
-## Getting Started
+### Local Development
 
-### Prerequisites
-
-- Node.js 18+
-- Docker & Docker Compose
-- PostgreSQL 15+
-- Redis 7+
-- Telegram Bot Tokens (2)
-- TON Wallet
-
-### Installation
-
-1. **Clone the repository**
 ```bash
-git clone https://github.com/mindburn-labs/labelmint.git
-cd labelmint
+# Install dependencies
+pnpm install
+
+# Start development environment
+pnpm run dev
+
+# Run tests
+pnpm run test
+
+# Type checking
+pnpm run type-check
+
+# Linting and formatting
+pnpm run lint
+pnpm run format
 ```
 
-2. **Install dependencies**
+### Service Management
+
 ```bash
-# Install dependencies for all packages
-npm install
-
-# Install backend dependencies
-cd services/labeling-backend
-npm install
-cd ../..
-
-# Install web app dependencies
-cd apps/web
-npm install
-cd ../..
-
-# Install bot dependencies
-cd services/bots/client-bot
-npm install
-cd ../../worker-bot
-npm install
+# Start specific services
+pnpm run dev:web              # Web application
+pnpm run dev:admin           # Admin dashboard
+pnpm run dev:telegram        # Telegram mini app
+pnpm run dev:api-gateway     # API Gateway
+pnpm run dev:labeling        # Labeling backend
+pnpm run dev:payment         # Payment backend
+pnpm run dev:bots            # Telegram bots
 ```
 
-3. **Set up environment variables**
+### Database Operations
+
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+# Database migrations
+pnpm run db:migrate
+
+# Seed development data
+pnpm run db:seed
+
+# Reset database
+pnpm run db:reset
+
+# Generate Prisma client
+pnpm run db:generate
 ```
 
-4. **Set up the database**
+## 🚀 Deployment
+
+### Environment Strategy
+
+| Environment | Purpose | URL |
+|-------------|---------|-----|
+| **Development** | Local development & testing | `localhost` |
+| **Staging** | Pre-production validation | `staging.labelmint.com` |
+| **Production** | Live production environment | `labelmint.com` |
+
+### Deployment Methods
+
+#### Docker Compose (Recommended for Development)
 ```bash
-cd services/labeling-backend
-npx prisma migrate dev
-npx prisma generate
+# Development deployment
+docker-compose -f config/docker/docker-compose.yml \
+               -f config/docker/docker-compose.dev.yml up -d
+
+# Production deployment
+docker-compose -f config/docker/docker-compose.yml \
+               -f config/docker/docker-compose.prod.yml up -d
 ```
 
-5. **Start the development environment**
+#### Kubernetes (Production)
 ```bash
-# Start all services with Docker Compose
-docker-compose up -d
+# Apply all manifests
+kubectl apply -f infrastructure/k8s/
 
-# Or start services individually
-npm run dev:backend
-npm run dev:web
-npm run dev:bots
+# Check deployment status
+kubectl get pods -n labelmint
+kubectl get services -n labelmint
 ```
 
-## API Documentation
+#### Terraform (Cloud Infrastructure)
+```bash
+cd infrastructure/terraform
+
+# Initialize and plan
+terraform init
+terraform plan -var-file=environments/production.tfvars
+
+# Apply infrastructure
+terraform apply -var-file=environments/production.tfvars
+```
+
+## 📊 API Documentation
 
 ### Authentication
 
-All API endpoints require authentication via JWT token:
+All API endpoints use JWT-based authentication:
 
 ```http
 Authorization: Bearer <jwt_token>
@@ -126,265 +281,166 @@ Authorization: Bearer <jwt_token>
 
 ### Core Endpoints
 
-#### Projects
-
-```http
-GET    /api/projects           # List projects
-POST   /api/projects           # Create project
-GET    /api/projects/:id       # Get project details
-PUT    /api/projects/:id       # Update project
-DELETE /api/projects/:id       # Delete project
-POST   /api/projects/:id/start # Start project
-POST   /api/projects/:id/pause # Pause project
-```
-
-#### Tasks
-
-```http
-GET    /api/tasks/next         # Get next task for worker
-POST   /api/tasks/:id/submit   # Submit task answer
-POST   /api/tasks/:id/skip     # Skip task
-POST   /api/tasks/:id/reserve  # Reserve task
-```
-
-#### Analytics
-
-```http
-GET    /api/analytics/projects/:id    # Project analytics
-GET    /api/analytics/workers/:id     # Worker analytics
-GET    /api/analytics/platform        # Platform analytics
-```
+| Service | Base Path | Description |
+|---------|-----------|-------------|
+| **API Gateway** | `/api/v1` | Central API routing |
+| **Tasks** | `/api/v1/tasks` | Task management |
+| **Projects** | `/api/v1/projects` | Project operations |
+| **Payments** | `/api/v1/payments` | Payment processing |
+| **Users** | `/api/v1/users` | User management |
+| **Analytics** | `/api/v1/analytics` | Data analytics |
 
 ### WebSocket Events
 
-Real-time notifications via Socket.IO:
+Real-time communication via WebSocket:
 
 ```javascript
-// Client connection
+// Authentication
 socket.emit('authenticate', { token: 'jwt_token' });
 
-// Listen for notifications
-socket.on('notification', (data) => {
-  // Handle notification
+// Task notifications
+socket.on('task_assigned', (task) => {
+  // Handle new task assignment
 });
 
-// Listen for task assignments (workers)
-socket.on('task_available', (task) => {
-  // Handle new task
+// Payment notifications
+socket.on('payment_received', (payment) => {
+  // Handle payment confirmation
 });
 ```
 
-## Deployment Guide
+## 🔒 Security
 
-### Production Deployment
+### Security Features
 
-1. **Prepare server**
-```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
+- **End-to-end Encryption** for all data
+- **Multi-factor Authentication** (MFA)
+- **Role-based Access Control** (RBAC)
+- **Security Audit Logs**
+- **Vulnerability Scanning**
+- **Compliance Certifications** (SOC 2, GDPR, PCI DSS)
 
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
+### Security Best Practices
 
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
+1. **Never commit secrets** to version control
+2. **Use environment variables** for sensitive configuration
+3. **Enable MFA** for all admin accounts
+4. **Regular security audits** and penetration testing
+5. **Keep dependencies updated** and scan for vulnerabilities
 
-2. **Configure environment**
-```bash
-# Create production environment file
-cp .env.example .env.production
+## 📈 Monitoring & Observability
 
-# Edit with production values
-nano .env.production
-```
+### Monitoring Stack
 
-3. **Deploy**
-```bash
-# Make deploy script executable
-chmod +x scripts/deploy.sh
+- **Prometheus**: Metrics collection and storage
+- **Grafana**: Visualization and dashboards
+- **Loki**: Log aggregation and querying
+- **Jaeger**: Distributed tracing
+- **Sentry**: Error tracking and performance monitoring
 
-# Run deployment
-./scripts/deploy.sh production
-```
+### Key Metrics
 
-### Docker Services
+- **Application Performance**: Response times, error rates, throughput
+- **Infrastructure**: CPU, memory, disk, network utilization
+- **Business Metrics**: User activity, task completion rates, revenue
+- **Security**: Authentication events, API access patterns
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Nginx | 80, 443 | Reverse proxy & SSL |
-| Web | 3000 | Dashboard frontend |
-| Backend | 3001 | API server |
-| Mini App | 3002 | Telegram Mini Apps |
-| PostgreSQL | 5432 | Primary database |
-| Redis | 6379 | Cache & queue |
-| MinIO | 9000 | File storage |
+## 🧪 Testing
 
-### SSL Certificate Setup
+### Testing Strategy
 
-```bash
-# Install Certbot
-sudo apt install certbot python3-certbot-nginx
+- **Unit Tests**: Component-level testing with Jest
+- **Integration Tests**: API and service integration testing
+- **E2E Tests**: End-to-end user journey testing with Playwright
+- **Performance Tests**: Load testing with k6
+- **Security Tests**: Vulnerability scanning and penetration testing
 
-# Generate certificate
-sudo certbot --nginx -d labelmint.mindburn.org -d api.labelmint.mindburn.org
+### Test Coverage
 
-# Set up auto-renewal
-sudo crontab -e
-# Add: 0 12 * * * /usr/bin/certbot renew --quiet
-```
+- **Frontend**: React components, hooks, utilities
+- **Backend**: API endpoints, services, database operations
+- **Infrastructure**: Deployment scripts, configuration validation
 
-## Configuration
+## 🤝 Contributing
 
-### Environment Variables
+### Development Guidelines
 
-#### Core Configuration
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/labelmint
-REDIS_URL=redis://localhost:6379
+1. **Follow TypeScript** best practices and strict mode
+2. **Write tests** for all new features and bug fixes
+3. **Document APIs** with OpenAPI specifications
+4. **Use semantic versioning** for releases
+5. **Follow git commit** message conventions
 
-# Authentication
-JWT_SECRET=your-super-secret-jwt-key
-JWT_EXPIRES_IN=7d
+### Pull Request Process
 
-# TON Integration
-TON_API_KEY=your-toncenter-api-key
-TON_MERCHANT_ADDRESS=EQ...
-USDT_MASTER_CONTRACT=EQ...
+1. **Create feature branch** from `develop`
+2. **Make changes** with comprehensive tests
+3. **Update documentation** as needed
+4. **Submit pull request** with detailed description
+5. **Code review** by maintainers
+6. **Automated tests** must pass
+7. **Merge** after approval
 
-# Telegram Bots
-TELEGRAM_BOT_TOKEN_CLIENT=your-client-bot-token
-TELEGRAM_BOT_TOKEN_WORKER=your-worker-bot-token
+### Code Standards
 
-# MinIO Storage
-MINIO_ACCESS_KEY=your-access-key
-MINIO_SECRET_KEY=your-secret-key
-MINIO_ENDPOINT=localhost:9000
-```
+- **ESLint** and **Prettier** for code formatting
+- **Husky** for git hooks and pre-commit checks
+- **Conventional Commits** for commit messages
+- **TypeScript** strict mode for type safety
 
-#### Bot Configuration
-```env
-# Client Bot
-WEB_APP_URL=https://app.labelmint.mindburn.org
+## 📞 Support & Community
 
-# Worker Bot
-WORKER_WEB_APP_URL=https://workers.labelmint.mindburn.org
-```
+### Getting Help
 
-### Database Schema
+- **📚 Documentation**: [docs/](./) directory
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/your-org/labelmint/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/your-org/labelmint/discussions)
+- **📧 Email**: support@labelmint.com
+- **🔔 Discord**: [Join our Discord](https://discord.gg/labelmint)
 
-Key tables:
-- `users` - User accounts
-- `projects` - Labeling projects
-- `tasks` - Individual labeling tasks
-- `taskAnswers` - Worker submissions
-- `workers` - Worker profiles
-- `transactions` - Payment records
-- `referrals` - Referral relationships
+### Community Resources
 
-## Task Types
+- **Blog**: [blog.labelmint.com](https://blog.labelmint.com)
+- **Tutorials**: [tutorials.labelmint.com](https://tutorials.labelmint.com)
+- **YouTube Channel**: [youtube.com/@labelmint](https://youtube.com/@labelmint)
+- **Twitter**: [@labelmint](https://twitter.com/labelmint)
 
-### Image Classification (IMG_CLS)
-- Classify images into predefined categories
-- Single label per image
-- 3 judgments required for consensus
-
-### Text Classification (TXT_CLS)
-- Categorize text content
-- Single label per text
-- 3 judgments required for consensus
-
-### RLHF Comparison (RLHF_PAIR)
-- Compare AI model responses
-- Select better response or tie
-- 3 judgments required for consensus
-
-### Bounding Box (BBOX)
-- Draw boxes around objects
-- Multiple objects per image
-- IoU calculation for consensus
-
-## Payment System
-
-### Supported Currencies
-- **TON** - Native TON cryptocurrency
-- **USDT** - TON-based USDT stablecoin
-
-### Withdrawal Process
-1. Worker sets withdrawal address
-2. Requests withdrawal with amount
-3. System processes transaction
-4. Funds sent to TON address
-
-### Fee Structure
-- Task payments: 5-12 USDT cents
-- Withdrawal fees:
-  - TON: 0.01 TON
-  - USDT: 1 USDT
-
-## Quality Control
-
-### Consensus Algorithm
-- Minimum 3 judgments per task
-- Early stop at 2/2 agreement
-- Quality check on disagreements
-
-### Gold Tasks
-- 15% of tasks are gold (known answers)
-- Used to verify worker accuracy
-- Failed gold tasks impact worker score
-
-### Worker Levels
-- **Bronze** (Level 1-10): Base rate
-- **Silver** (Level 11-25): 2% bonus
-- **Gold** (Level 26-50): 5% bonus
-- **Platinum** (Level 51+): 10% bonus
-
-## Contributing
-
-We welcome contributions! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-### Development Workflow
-
-```bash
-# Install dependencies
-npm install
-
-# Run tests
-npm test
-
-# Run linting
-npm run lint
-
-# Build project
-npm run build
-
-# Start development
-npm run dev
-```
-
-### Code Style
-
-- Use TypeScript for all new code
-- Follow Prettier configuration
-- Write unit tests for new features
-- Document public APIs
-
-## Support
-
-- **Documentation**: [https://docs.labelmint.mindburn.org](https://docs.labelmint.mindburn.org)
-- **Support Chat**: [@LabelMintSupport](https://t.me/LabelMintSupport)
-- **Bug Reports**: [GitHub Issues](https://github.com/mindburn-labs/labelmint/issues)
-
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+## 🗺️ Roadmap
+
+### Q1 2024
+- [x] **Microservices Architecture** complete
+- [x] **PWA Features** implementation
+- [x] **Advanced Analytics** dashboard
+- [ ] **AI-Powered Task Assistance** beta
+
+### Q2 2024
+- [ ] **Enterprise SSO Integration**
+- [ ] **Advanced Consensus Algorithms**
+- [ ] **Mobile Apps** (iOS/Android)
+- [ ] **White-label Solutions**
+
+### Q3 2024
+- [ ] **Computer Vision Tasks**
+- [ ] **Audio Transcription**
+- [ ] **Advanced Quality Control**
+- [ ] **Multi-language Support**
+
+### Q4 2024
+- [ ] **Blockchain Governance**
+- [ ] **Decentralized Storage**
+- [ ] **Advanced Analytics** v2
+- [ ] **Global Expansion**
+
+---
+
+**🚀 Built with ❤️ by the LabelMint Team**
+
+For scalable, secure, and exceptional data labeling solutions.
+
+### Quick Links
+
+- **🏠 [Home](../README.md)** | **📖 [Setup](./SETUP.md)** | **🏗️ [Architecture](./ARCHITECTURE.md)** | **🔧 [API](./api/README.md)** | **🚀 [Deploy](./DEPLOYMENT.md)** | **🔒 [Security](./SECURITY.md)** | **📋 [Runbooks](./runbooks/README.md)** | **🤝 [Contributing](./DEVELOPMENT.md)**

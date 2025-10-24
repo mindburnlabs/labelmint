@@ -40,14 +40,27 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="p-8">
+    <div>
+      {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Settings
-        </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Manage your account and system settings.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Settings
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Manage your account and system settings.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              Export Settings
+            </button>
+            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+              Reset to Defaults
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -59,13 +72,17 @@ export default function SettingsPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                     activeTab === tab.id
-                      ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-l-4 border-blue-500'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-l-4 border-transparent'
                   }`}
                 >
-                  <tab.icon className="mr-3 h-5 w-5" />
+                  <tab.icon className={`mr-3 h-5 w-5 ${
+                    activeTab === tab.id
+                      ? 'text-blue-500 dark:text-blue-400'
+                      : 'text-gray-400 dark:text-gray-500'
+                  }`} />
                   {tab.name}
                 </button>
               ))}

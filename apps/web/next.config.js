@@ -1,127 +1,71 @@
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  disable: process.env.NODE_ENV === 'development',
-  register: true,
-  skipWaiting: true,
-  runtimeCaching: [
-    {
-      urlPattern: /^https?.*/,
-      handler: 'NetworkFirst',
-      options: {
-        cacheName: 'https-calls',
-        networkTimeoutSeconds: 15,
-        expiration: {
-          maxEntries: 150,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
-    },
-    {
-      urlPattern: /^https:\/\/api\.labelmint\.com\/.*/i,
-      handler: 'NetworkFirst',
-      options: {
-        cacheName: 'api-cache',
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 60 * 60 * 24, // 24 hours
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
-    },
-    {
-      urlPattern: /\.(?:js|css|html|json)$/,
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'static-resources',
-        expiration: {
-          maxEntries: 500,
-          maxAgeSeconds: 24 * 60 * 60 * 365, // 1 year
-        },
-      },
-    },
-    {
-      urlPattern: /\.(?:jpg|jpeg|gif|png|svg|ico|webp)$/i,
-      handler: 'CacheFirst',
-      options: {
-        cacheName: 'images',
-        expiration: {
-          maxEntries: 1000,
-          maxAgeSeconds: 30 * 24 * 60 * 60 * 12, // 1 year
-        },
-      },
-    },
-    {
-      urlPattern: /\.(?:woff|woff2|ttf|eot)$/i,
-      handler: 'CacheFirst',
-      options: {
-        cacheName: 'fonts',
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
-        },
-      },
-    },
-  ],
-});
-
-const baseConfig = require('../../config/shared/next.config.base.js');
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  ...baseConfig,
   experimental: {
-    appDir: true,
+    optimizeCss: true,
+    optimizePackageImports: ['@labelmint/ui', 'framer-motion', 'recharts', '@headlessui/react'],
+    turbo: {
+      rules: {
+        '*.svg': {
+          loaders: ['@svgr/webpack'],
+          as: '*.js',
+        },
+      },
+    },
   },
+  reactStrictMode: true,
+  swcMinify: true,
   images: {
-    domains: ['api.labelmint.com', 'cdn.labelmint.com', 'telegram.org'],
+    domains: ['localhost', 'api.labelmint.com', 'cdn.labelmint.com', 'telegram.org', 'supabase.co', 'labelmint.mindburn.org'],
     formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   env: {
-    ...baseConfig.env,
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3000',
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },
   async rewrites() {
     return [
       {
-        source: '/share',
-        destination: '/api/share-handler',
-      },
-      {
-        source: '/handle-protocol',
-        destination: '/api/protocol-handler',
+        source: '/api/:path*',
+        destination: `${process.env.API_BASE_URL || 'http://localhost:3001'}/api/:path*`,
       },
     ];
   },
-  // Merge additional headers with base config headers
-  async headers() {
-    const baseHeaders = await baseConfig.headers();
+  async redirects() {
     return [
-      ...baseHeaders,
       {
-        source: '/sw.js',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-        ],
-      },
-      {
-        source: '/manifest.json',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
+        source: '/home',
+        destination: '/',
+        permanent: true,
       },
     ];
   },
+  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+    };
+
+    // Add support for custom icons and assets
+    config.module.rules.push({
+      test: /\.svg$/i,
+      issuer: /\.[jt]sx?$/,
+      use: ['@svgr/webpack'],
+    });
+
+    return config;
+  },
+  poweredByHeader: false,
+  generateEtags: false,
 };
 
-module.exports = withPWA(nextConfig);
+export default nextConfig;

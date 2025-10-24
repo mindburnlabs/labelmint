@@ -1,0 +1,270 @@
+# LabelMint TON Smart Contract Deployment Configuration
+# This file defines the deployment configuration for TON smart contracts
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ton-deployment-config
+  namespace: labelmint
+data:
+  # Network Configuration
+  NETWORK: "testnet"  # testnet | mainnet
+
+  # RPC Endpoints
+  TESTNET_RPC_URL: "https://testnet.toncenter.com/api/v2/jsonRPC"
+  MAINNET_RPC_URL: "https://toncenter.com/api/v2/jsonRPC"
+
+  # Contract Configuration
+  CONTRACT_NAME: "PaymentProcessor"
+  CONTRACT_VERSION: "1.0.0"
+  INITIAL_BALANCE: "100000000"  # 0.1 TON in nanoTON
+  GAS_LIMIT: "50000000"        # 0.05 TON in nanoTON
+
+  # Monitoring Configuration
+  POLLING_INTERVAL: "30"       # seconds
+  ENABLE_MONITORING: "true"
+
+  # Security Configuration
+  REQUIRE_CONFIRMATIONS: "3"   # number of block confirmations
+  MAX_RETRIES: "3"
+  RETRY_DELAY: "5000"          # milliseconds
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ton-deployment-secrets
+  namespace: labelmint
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual values
+  deployer-mnemonic: ""  # echo -n "word1 word2 word3 ..." | base64
+  testnet-api-key: ""     # echo -n "your-testnet-api-key" | base64
+  mainnet-api-key: ""     # echo -n "your-mainnet-api-key" | base64
+  database-url: ""        # echo -n "postgresql://..." | base64
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ton-contract-deployment
+  namespace: labelmint
+  labels:
+    app: ton-deployment
+    component: smart-contract
+spec:
+  template:
+    metadata:
+      labels:
+        app: ton-deployment
+        component: smart-contract
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: contract-deployer
+        image: labelmint/ton-contract-deployer:latest
+        imagePullPolicy: IfNotPresent
+
+        env:
+        # Network Configuration
+        - name: NETWORK
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: NETWORK
+
+        # RPC Configuration
+        - name: TESTNET_RPC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: TESTNET_RPC_URL
+
+        - name: MAINNET_RPC_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: MAINNET_RPC_URL
+
+        # Contract Configuration
+        - name: CONTRACT_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: CONTRACT_NAME
+
+        - name: CONTRACT_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: CONTRACT_VERSION
+
+        - name: INITIAL_BALANCE
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: INITIAL_BALANCE
+
+        - name: GAS_LIMIT
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: GAS_LIMIT
+
+        # Monitoring Configuration
+        - name: POLLING_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: POLLING_INTERVAL
+
+        - name: ENABLE_MONITORING
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: ENABLE_MONITORING
+
+        # Security Configuration
+        - name: REQUIRE_CONFIRMATIONS
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: REQUIRE_CONFIRMATIONS
+
+        - name: MAX_RETRIES
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: MAX_RETRIES
+
+        - name: RETRY_DELAY
+          valueFrom:
+            configMapKeyRef:
+              name: ton-deployment-config
+              key: RETRY_DELAY
+
+        # Secrets
+        - name: DEPLOYER_MNEMONIC
+          valueFrom:
+            secretKeyRef:
+              name: ton-deployment-secrets
+              key: deployer-mnemonic
+
+        - name: TESTNET_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ton-deployment-secrets
+              key: testnet-api-key
+
+        - name: MAINNET_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ton-deployment-secrets
+              key: mainnet-api-key
+
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: ton-deployment-secrets
+              key: database-url
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+        volumeMounts:
+        - name: contract-artifacts
+          mountPath: /app/contracts/output
+
+        # Deployment timeout
+        timeoutSeconds: 600
+
+      volumes:
+      - name: contract-artifacts
+        configMap:
+          name: contract-build-artifacts
+
+---
+# Service for deployment monitoring
+apiVersion: v1
+kind: Service
+metadata:
+  name: ton-deployment-monitor
+  namespace: labelmint
+  labels:
+    app: ton-deployment
+    component: monitor
+spec:
+  selector:
+    app: ton-deployment
+    component: smart-contract
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+# Horizontal Pod Autoscaler for deployment monitoring
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ton-deployment-hpa
+  namespace: labelmint
+spec:
+  scaleTargetRef:
+    apiVersion: batch/v1
+    kind: Job
+    name: ton-contract-deployment
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Network Policy for secure deployment
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ton-deployment-netpol
+  namespace: labelmint
+spec:
+  podSelector:
+    matchLabels:
+      app: ton-deployment
+  policyTypes:
+  - Egress
+  - Ingress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: labelmint
+    ports:
+    - protocol: TCP
+      port: 5432  # Database
+    - protocol: TCP
+      port: 443   # HTTPS for TON RPC
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS
+  ingress: []

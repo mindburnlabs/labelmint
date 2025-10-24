@@ -141,6 +141,50 @@ openspec/
 │   └── archive/            # Completed changes
 ```
 
+> Current state: the repo only contains `openspec/project.md` plus flat markdown summaries in `openspec/changes/`. No `openspec/specs/` directory exists yet—create it the moment a change graduates into an approved capability. Legacy change notes pre-date the current monorepo layout, so double-check paths before using them as source of truth.
+
+## LabelMint Codebase Orientation
+
+### Monorepo Layout
+- `apps/` – Next.js web (`web`, `admin`) and Vite Telegram mini app packages; run each with `pnpm --filter <app> dev`.
+- `services/` – Express-based backends (`api-gateway`, `labeling-backend`, `payment-backend`, `bots`, `workflow-engine`, `enterprise-api`, `collaboration-service`, `analytics-engine`, `white-label-service`); most expose a `dev` script via `tsx` or `nodemon`.
+- `packages/` – Shared libraries (`@labelmint/shared`, `@labelmint/ui`) that export types, validation, database helpers, and UI components.
+- `config/` – Centralised env templates, Docker/monitoring configs, and TypeScript bases (`config/shared/tsconfig.*`) that define repo-wide compiler settings.
+- `scripts/`, `tests/`, `supabase/`, `database/`, `infrastructure/`, `contracts/`, `k6-tests/`, `nginx/` – Operational tooling (test runner, Supabase wrapper, DB automation, IaC, TON contracts, load tests, ingress config).
+
+### Frontend Applications
+- `apps/web` – Next.js 15 PWA consuming `NEXT_PUBLIC_*` env vars and `@/` aliasing from `config/shared/tsconfig.paths.json`.
+- `apps/admin` – Next.js 15 dashboard (default port 3001) sharing UI primitives and React Query powered data fetching.
+- `apps/telegram-mini-app` – Vite + React 19 Telegram Web App client; verify Telegram SDK init before feature changes.
+
+### Backend & Services
+- `services/api-gateway` – Express proxy with rate limiting, swagger docs, service registry, and `@middleware/*` aliases.
+- `services/labeling-backend` – Core task engine (`src/index.ts`) wiring Postgres, Redis, WebSocketService, AI/quality-control routes, and file handling.
+- `services/payment-backend` – TON/USDT service (`src/app.ts` & `src/server.ts`) using Prisma, queue workers, and compliance modules.
+- `services/bots` – Wrapper running client and worker Grammy bots (see `client-bot/` and `worker-bot/` sub-packages for flows and scripts).
+- Additional service folders (`enterprise-api`, `workflow-engine`, `collaboration-service`, `analytics-engine`, `white-label-service`) host specialised domain logic—inspect their `src/` contents before assuming maturity.
+
+### Shared Packages
+- `packages/shared` – Exposes validation services, consensus logic, repository helpers, database connectors, schemas, and shared types via `@labelmint/shared`.
+- `packages/ui` – Collects reusable Tailwind/React components, hooks, and styles exported as `@labelmint/ui`.
+
+### Data, Infrastructure, and Env
+- `supabase/` – Local Supabase orchestration scripts (`RUN_NOW.sh`, `setup-supabase.js`), migrations, and generated types; align database updates here.
+- `database/` – Shell scripts and SQL for Postgres/Redis topology (replication, backups, HA); review before touching DB automation.
+- `infrastructure/` & `nginx/` – Kubernetes/Terraform manifests, monitoring config, and reverse-proxy templates.
+
+### Tooling & Paths
+- Root `package.json` enforces Node `>=20` and pnpm `>=9`; bootstrap via `pnpm install`.
+- Common scripts: `pnpm services:up`, `pnpm apps:up`, `pnpm docker:up`, `pnpm test:all`, `pnpm lint`, `pnpm type-check`.
+- `config/shared/tsconfig.paths.json` defines `@/` and `@labelmint/*` aliases used across packages; update this file plus package-level tsconfigs when adding new paths.
+- Documentation often references historic locations (e.g. `/telegram-labeling-platform/...`); always reconcile with actual `apps/` or `services/` folders before editing.
+
+### Testing & QA
+- Automated runner lives at `scripts/test-runner.ts` and orchestrates Vitest, Playwright, and Hardhat suites; it expects test specs under the root `tests/` hierarchy (`unit/`, `integration/`, `e2e/`, `contracts/`, etc.).
+- Individual services maintain their own `tests/` or `test/` directories (e.g. labeling-backend’s Node scripts, payment-backend’s Jest suite); prefer adding coverage alongside the service you touch.
+- Many scripts rely on Postgres/Redis or Supabase being available—spin them up via `pnpm docker:up` or the Supabase scripts before running integration/e2e suites.
+- When adding new test categories, update `scripts/test-runner.ts` so CI picks them up.
+
 ## Creating Change Proposals
 
 ### Decision Tree

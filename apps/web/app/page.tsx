@@ -1,5 +1,7 @@
 import Hero from '@/components/Hero'
-import PricingCalculator from '@/components/PricingCalculator'
+import Features from '@/components/Features'
+import HowItWorks from '@/components/HowItWorks'
+import Pricing from '@/components/Pricing'
 import Testimonials from '@/components/Testimonials'
 import CTA from '@/components/CTA'
 import Navbar from '@/components/Navbar'
@@ -11,7 +13,9 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
-        <PricingCalculator />
+        <Features />
+        <HowItWorks />
+        <Pricing />
         <Testimonials />
         <CTA />
       </main>

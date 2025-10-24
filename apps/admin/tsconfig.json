@@ -3,7 +3,9 @@
     "../../config/shared/tsconfig.app.json",
     "../../config/shared/tsconfig.paths.json"
   ],
-  "compilerOptions": {},
+  "compilerOptions": {
+    "jsx": "preserve"
+  },
   "include": [
     "next-env.d.ts",
     ".next/types/**/*.ts",

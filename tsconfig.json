@@ -1,0 +1,144 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "composite": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "removeComments": false,
+    "importHelpers": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": false,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "baseUrl": ".",
+    "paths": {
+      // Core LabelMint workspace paths (from shared configs)
+      "@labelmint/shared/*": ["./packages/shared/*"],
+      "@labelmint/ui/*": ["./packages/ui/*"],
+      "@labelmint/types": ["./packages/shared/types"],
+      "@labelmint/utils": ["./packages/shared/utils"],
+      "@labelmint/validation": ["./packages/shared/validation"],
+      "@labelmint/database": ["./packages/shared/database"],
+      "@labelmint/auth": ["./packages/shared/auth"],
+      "@labelmint/config": ["./packages/shared/config"],
+      "@labelmint/api-client": ["./packages/clients/api-client"],
+      "@labelmint/telegram-client": ["./packages/clients/telegram-client"],
+      "@labelmint/payment-client": ["./packages/clients/payment-client"],
+
+      // Payment-related paths (based on test imports)
+      "@payment/*": ["./services/payment-backend/src/payment/*"],
+      "@payment/strategies/*": ["./services/payment-backend/src/services/payment/strategies/*"],
+      "@payment/types": ["./services/payment-backend/src/services/payment/interfaces/*"],
+      "@payment/PaymentManager": ["./services/payment-backend/src/services/payment/PaymentManager.ts"],
+
+      // Service-specific paths (matching Jest config)
+      "@payment-backend/*": ["./services/payment-backend/src/*"],
+      "@labeling-backend/*": ["./services/labeling-backend/src/*"],
+      "@api-gateway/*": ["./services/api-gateway/src/*"],
+      "@enterprise-api/*": ["./services/enterprise-api/src/*"],
+      "@bot/*": ["./services/bots/src/*"],
+
+      // App-specific paths (matching Jest config)
+      "@web/*": ["./apps/web/src/*"],
+      "@admin/*": ["./apps/admin/src/*"],
+
+      // Test utility paths (for test environment)
+      "@test/*": ["./tests/*"],
+      "@test/mocks/*": ["./tests/mocks/*"],
+      "@test/mocks/services": ["./tests/mocks/services"],
+      "@test/utils/*": ["./tests/utils/*"],
+      "@test/utils/mocks": ["./tests/utils/mocks"],
+
+      // Shared paths (from Jest config)
+      "@shared/*": ["./packages/shared/src/*"],
+      "@shared/types$": ["./packages/shared/types"],
+      "@shared/validation$": ["./packages/shared/validation"],
+      "@shared/utils$": ["./packages/shared/utils"],
+      "@shared/database$": ["./packages/shared/database"],
+      "@shared/consensus/*": ["./packages/shared/src/consensus/*"],
+      "@shared/api-client/*": ["./packages/shared/api-client/src/*"],
+      "@shared/observability/*": ["./packages/shared/observability/src/*"],
+      "@shared/redis-cluster/*": ["./packages/shared/redis-cluster/src/*"],
+
+      // UI paths
+      "@ui/*": ["./packages/ui/src/*"],
+
+      // Contract paths
+      "@contracts/*": ["./packages/contracts/src/*"],
+
+      // Local paths (for development in individual packages)
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/pages/*": ["./src/pages/*"],
+      "@/styles/*": ["./src/styles/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/assets/*": ["./src/assets/*"],
+      "@/config/*": ["./src/config/*"],
+      "@/api/*": ["./src/api/*"],
+      "@/store/*": ["./src/store/*"],
+      "@/contexts/*": ["./src/contexts/*"],
+      "@/constants/*": ["./src/constants/*"]
+    }
+  },
+  "include": [
+    "packages/**/*",
+    "services/**/*",
+    "apps/**/*",
+    "tests/**/*",
+    "*.ts",
+    "*.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "coverage",
+    "**/*.js",
+    "**/*.d.ts"
+  ],
+  "references": [
+    { "path": "./config/shared/tsconfig.base.json" },
+    { "path": "./config/shared/tsconfig.paths.json" },
+    { "path": "./config/shared/tsconfig.package.json" }
+  ],
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  }
+}

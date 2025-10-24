@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import { SSOService } from '../services/SSOService.js'
+import { SSOTemplatesService } from '../services/SSOTemplatesService.js'
 import { logger } from '../utils/logger.js'
 import { AuditService } from '../services/AuditService.js'
 
@@ -340,5 +341,82 @@ export class SSOController {
       Location="${sloUrl}" />
   </md:SPSSODescriptor>
 </md:EntityDescriptor>`
+  }
+
+  /**
+   * Get available SSO templates
+   */
+  static async getTemplates(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const templates = SSOTemplatesService.getAllTemplates()
+
+      res.json({
+        success: true,
+        data: {
+          templates: Object.keys(templates),
+          details: templates
+        },
+        message: 'SSO templates retrieved successfully'
+      })
+    } catch (error) {
+      logger.error('Get SSO templates error', { error: error.message })
+      next(error)
+    }
+  }
+
+  /**
+   * Get specific SSO template
+   */
+  static async getTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { provider } = req.params
+
+      const template = SSOTemplatesService.getTemplateByProvider(provider)
+
+      if (!template) {
+        res.status(404).json({
+          success: false,
+          error: 'SSO template not found for this provider'
+        })
+        return
+      }
+
+      res.json({
+        success: true,
+        data: template,
+        message: 'SSO template retrieved successfully'
+      })
+    } catch (error) {
+      logger.error('Get SSO template error', { error: error.message })
+      next(error)
+    }
+  }
+
+  /**
+   * Get setup instructions for SSO provider
+   */
+  static async getSetupInstructions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { provider } = req.params
+
+      const instructions = SSOTemplatesService.getSetupInstructions(provider)
+
+      if (!instructions) {
+        res.status(404).json({
+          success: false,
+          error: 'Setup instructions not found for this provider'
+        })
+        return
+      }
+
+      res.json({
+        success: true,
+        data: instructions,
+        message: 'Setup instructions retrieved successfully'
+      })
+    } catch (error) {
+      logger.error('Get SSO setup instructions error', { error: error.message })
+      next(error)
+    }
   }
 }

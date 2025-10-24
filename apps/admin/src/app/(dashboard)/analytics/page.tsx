@@ -7,13 +7,14 @@ import {
   ArrowDownTrayIcon,
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
-import { analyticsApi } from '@/lib/api';
+import { analyticsApi } from '@/lib/analyticsApi';
 import { LineChart } from '@/components/charts/LineChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { PieChart } from '@/components/charts/PieChart';
 import { KPICard } from '@/components/charts/KPICard';
 import { Button } from '@labelmint/ui/components/Button';
 import { formatCurrency } from '@labelmint/utils';
+import { EnterpriseAnalytics } from '@/components/analytics/EnterpriseAnalytics';
 import {
   UsersIcon,
   FolderIcon,
@@ -24,68 +25,63 @@ import {
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState('30d');
 
+  const filters = { dateRange: dateRange as any };
+
   const { data: overviewData, isLoading: overviewLoading } = useQuery({
     queryKey: ['analytics-overview', dateRange],
-    queryFn: () => analyticsApi.getOverview(dateRange),
+    queryFn: () => analyticsApi.getOverview(filters),
   });
 
   const { data: userMetrics, isLoading: userLoading } = useQuery({
     queryKey: ['analytics-users', dateRange],
-    queryFn: () => analyticsApi.getUserMetrics(dateRange),
+    queryFn: () => analyticsApi.getUserMetrics(filters),
   });
 
   const { data: projectMetrics, isLoading: projectLoading } = useQuery({
     queryKey: ['analytics-projects', dateRange],
-    queryFn: () => analyticsApi.getProjectMetrics(dateRange),
+    queryFn: () => analyticsApi.getProjectMetrics(filters),
   });
 
   const { data: financialMetrics, isLoading: financialLoading } = useQuery({
     queryKey: ['analytics-financial', dateRange],
-    queryFn: () => analyticsApi.getFinancialMetrics(dateRange),
+    queryFn: () => analyticsApi.getFinancialMetrics(filters),
   });
 
   const { data: qualityMetrics, isLoading: qualityLoading } = useQuery({
     queryKey: ['analytics-quality', dateRange],
-    queryFn: () => analyticsApi.getQualityMetrics(dateRange),
+    queryFn: () => analyticsApi.getQualityMetrics(filters),
   });
 
-  const userGrowthData = [
-    { date: 'Jan', users: 240, newUsers: 45 },
-    { date: 'Feb', users: 280, newUsers: 40 },
-    { date: 'Mar', users: 320, newUsers: 40 },
-    { date: 'Apr', users: 380, newUsers: 60 },
-    { date: 'May', users: 450, newUsers: 70 },
-    { date: 'Jun', users: 520, newUsers: 70 },
-  ];
+  // Enterprise metrics
+  const { data: enterpriseMetrics, isLoading: enterpriseLoading } = useQuery({
+    queryKey: ['analytics-enterprise', dateRange],
+    queryFn: () => analyticsApi.getEnterpriseMetrics(filters),
+  });
 
-  const projectTypeDistribution = [
-    { name: 'Image Classification', value: 45 },
-    { name: 'Text Annotation', value: 30 },
-    { name: 'Data Validation', value: 15 },
-    { name: 'Audio Transcription', value: 10 },
-  ];
+  const { data: workflowMetrics, isLoading: workflowLoading } = useQuery({
+    queryKey: ['analytics-workflows', dateRange],
+    queryFn: () => analyticsApi.getWorkflowMetrics(filters),
+  });
 
-  const topCountries = [
-    { name: 'United States', users: 450, percentage: 35 },
-    { name: 'India', users: 280, percentage: 22 },
-    { name: 'Philippines', users: 180, percentage: 14 },
-    { name: 'United Kingdom', users: 120, percentage: 9 },
-    { name: 'Canada', users: 100, percentage: 8 },
-  ];
+  const { data: integrationMetrics, isLoading: integrationLoading } = useQuery({
+    queryKey: ['analytics-integrations', dateRange],
+    queryFn: () => analyticsApi.getIntegrationMetrics(filters),
+  });
 
-  const qualityTrends = [
-    { date: 'Week 1', accuracy: 94.2, disputes: 12 },
-    { date: 'Week 2', accuracy: 94.5, disputes: 10 },
-    { date: 'Week 3', accuracy: 95.1, disputes: 8 },
-    { date: 'Week 4', accuracy: 95.8, disputes: 6 },
-  ];
+  const { data: complianceMetrics, isLoading: complianceLoading } = useQuery({
+    queryKey: ['analytics-compliance', dateRange],
+    queryFn: () => analyticsApi.getComplianceMetrics(filters),
+  });
 
-  const revenueByService = [
-    { service: 'Image Classification', revenue: 45000 },
-    { service: 'Text Annotation', revenue: 32000 },
-    { service: 'Data Validation', revenue: 28000 },
-    { service: 'Audio Transcription', revenue: 15000 },
-  ];
+  // Use real data from API calls
+  const userGrowthData = userMetrics?.userGrowth || [];
+  const projectTypeDistribution = projectMetrics?.projectTypes?.map(p => ({
+    name: p.type,
+    value: p.percentage
+  })) || [];
+  const topCountries = userMetrics?.topCountries || [];
+  const qualityTrends = qualityMetrics?.qualityTrends || [];
+  const revenueByService = financialMetrics?.revenueByService || [];
 
   const handleGenerateReport = async (type: string) => {
     try {
@@ -111,25 +107,44 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div>
+      {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Analytics & Reports
-        </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Business intelligence and performance insights.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Analytics & Reports
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Business intelligence and performance insights.
+            </p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              Schedule Reports
+            </button>
+            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+              Create Custom Report
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Date Range Selector */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-8">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-8">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <CalendarIcon className="h-5 w-5 text-gray-400" />
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
+              <CalendarIcon className="h-5 w-5 text-gray-400" />
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">Date Range</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Select timeframe for analytics</p>
+              </div>
+            </div>
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="7d">Last 7 days</option>
               <option value="30d">Last 30 days</option>
@@ -137,25 +152,21 @@ export default function AnalyticsPage() {
               <option value="365d">Last year</option>
             </select>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
+          <div className="flex items-center space-x-2">
+            <button
               onClick={() => handleExportData('analytics', 'csv')}
+              className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
             >
               <ArrowDownTrayIcon className="h-4 w-4" />
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
+              <span>Export CSV</span>
+            </button>
+            <button
               onClick={() => handleGenerateReport('full-report')}
+              className="px-3 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center space-x-2"
             >
               <DocumentTextIcon className="h-4 w-4" />
-              Generate Report
-            </Button>
+              <span>Generate Report</span>
+            </button>
           </div>
         </div>
       </div>
@@ -198,10 +209,16 @@ export default function AnalyticsPage() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            User Growth Trend
-          </h2>
+        {/* User Growth Trend */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              User Growth Trend
+            </h2>
+            <select className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+              All Users
+            </select>
+          </div>
           <LineChart
             data={userGrowthData}
             lines={[
@@ -220,10 +237,16 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Project Distribution
-          </h2>
+        {/* Project Distribution */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Project Distribution
+            </h2>
+            <button className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+              View Details
+            </button>
+          </div>
           <PieChart
             data={projectTypeDistribution}
             height={300}
@@ -234,10 +257,16 @@ export default function AnalyticsPage() {
 
       {/* Revenue and Quality */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Revenue by Service Type
-          </h2>
+        {/* Revenue by Service Type */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Revenue by Service Type
+            </h2>
+            <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-2 py-1 rounded-full">
+              +23.5% vs last period
+            </span>
+          </div>
           <BarChart
             data={revenueByService}
             bars={[
@@ -254,10 +283,16 @@ export default function AnalyticsPage() {
           />
         </div>
 
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Quality Trends
-          </h2>
+        {/* Quality Trends */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Quality Trends
+            </h2>
+            <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-2 py-1 rounded-full">
+              Above target
+            </span>
+          </div>
           <LineChart
             data={qualityTrends}
             lines={[
@@ -316,6 +351,19 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Enterprise Analytics Section */}
+      <div className="mt-8">
+        <EnterpriseAnalytics
+          enterpriseMetrics={enterpriseMetrics}
+          workflowMetrics={workflowMetrics}
+          integrationMetrics={integrationMetrics}
+          complianceMetrics={complianceMetrics}
+          isLoading={enterpriseLoading || workflowLoading || integrationLoading || complianceLoading}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+        />
       </div>
 
       {/* Quick Actions */}

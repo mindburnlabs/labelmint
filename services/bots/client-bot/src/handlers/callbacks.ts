@@ -111,7 +111,7 @@ async function handleProjectControl(ctx: AuthContext, action: 'pause' | 'resume'
             inline_keyboard: [
               [
                 { text: '🔄 Refresh Status', callback_data: `status_${projectId}` },
-                { text: '📋 All Projects', 'my_projects' },
+                { text: '📋 All Projects', callback_data: 'my_projects' },
               ],
             ],
           },

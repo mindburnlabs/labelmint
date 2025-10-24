@@ -4,6 +4,7 @@ import { TonConnectButton, useTonWallet } from '@tonconnect/ui-react';
 import { useTWA } from '@twa-dev/sdk/react';
 import { Address, beginCell, toNano } from '@ton/ton';
 import { SendTransactionRequest } from '@tonconnect/ui-react';
+import { telegramService } from '../services/telegramService';
 
 interface Transaction {
   id: string;
@@ -82,8 +83,9 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
 
   // Connect native Telegram wallet
   const connectTelegramWallet = () => {
-    WebApp.openLink('https://t.me/wallet');
-    WebApp.showAlert('Opening Telegram Wallet...');
+    telegramService.haptic.selection();
+    telegramService.openLink('https://t.me/wallet');
+    telegramService.showAlert('Opening Telegram Wallet...');
   };
 
   // Instant USDT withdrawal
@@ -91,17 +93,20 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
     const amount = parseFloat(withdrawAmount);
 
     if (!amount || amount < 1) {
-      WebApp.showAlert('Minimum withdrawal: 1 USDT');
+      telegramService.haptic.notification('error');
+      telegramService.showError('Minimum withdrawal: 1 USDT');
       return;
     }
 
     if (amount > balance) {
-      WebApp.showAlert('Insufficient balance');
+      telegramService.haptic.notification('error');
+      telegramService.showError('Insufficient balance');
       return;
     }
 
     if (!wallet?.account.address && !telegramWallet) {
-      WebApp.showAlert('Please connect a wallet first');
+      telegramService.haptic.notification('error');
+      telegramService.showError('Please connect a wallet first');
       return;
     }
 
@@ -134,15 +139,18 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
 
         setShowWithdrawModal(false);
         setWithdrawAmount('');
-        WebApp.showAlert('💰 Withdrawal initiated! Check your wallet.');
+        telegramService.haptic.notification('success');
+        telegramService.showAlert('💰 Withdrawal initiated! Check your wallet.');
         fetchWalletData();
         fetchTransactions();
       } else {
-        WebApp.showAlert(result.error || 'Withdrawal failed');
+        telegramService.haptic.notification('error');
+        telegramService.showError(result.error || 'Withdrawal failed');
       }
     } catch (error) {
       console.error('Withdrawal error:', error);
-      WebApp.showAlert('Withdrawal failed. Please try again.');
+      telegramService.haptic.notification('error');
+      telegramService.showError('Withdrawal failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -167,7 +175,8 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
       await wallet.sendTransaction(transaction);
     } catch (error) {
       console.error('Transaction error:', error);
-      WebApp.showAlert('Transaction failed. Please try again.');
+      telegramService.haptic.notification('error');
+      telegramService.showError('Transaction failed. Please try again.');
     }
   };
 
@@ -203,14 +212,20 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
 
         <div className="flex gap-2">
           <Button
-            onClick={() => setShowWithdrawModal(true)}
+            onClick={() => {
+              telegramService.haptic.selection();
+              setShowWithdrawModal(true);
+            }}
             disabled={balance < 1 || isLoading}
             className="flex-1 bg-white text-blue-600"
           >
             Withdraw
           </Button>
           <Button
-            onClick={() => setShowTransactionModal(true)}
+            onClick={() => {
+              telegramService.haptic.selection();
+              setShowTransactionModal(true);
+            }}
             mode="outline"
             className="bg-white/20 border-white text-white"
           >
@@ -248,7 +263,10 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
             <Button
               size="s"
               mode="outline"
-              onClick={connectTelegramWallet}
+              onClick={() => {
+                telegramService.haptic.selection();
+                connectTelegramWallet();
+              }}
             >
               Connect
             </Button>
@@ -295,7 +313,10 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
               <Button
                 key={amount}
                 mode="outline"
-                onClick={() => setWithdrawAmount(amount.toString())}
+                onClick={() => {
+                  telegramService.haptic.selection();
+                  setWithdrawAmount(amount.toString());
+                }}
               >
                 ${amount}
               </Button>
@@ -315,14 +336,20 @@ export const WorkerWallet: React.FC<WorkerWalletProps> = ({
 
           <div className="flex gap-2">
             <Button
-              onClick={() => setShowWithdrawModal(false)}
+              onClick={() => {
+                telegramService.haptic.selection();
+                setShowWithdrawModal(false);
+              }}
               mode="outline"
               className="flex-1"
             >
               Cancel
             </Button>
             <Button
-              onClick={withdrawUSDT}
+              onClick={() => {
+                telegramService.haptic.impact('medium');
+                withdrawUSDT();
+              }}
               disabled={!withdrawAmount || parseFloat(withdrawAmount) < 1 || isLoading}
               loading={isLoading}
               className="flex-1"

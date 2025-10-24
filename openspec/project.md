@@ -1,106 +1,113 @@
 # Project Context
 
 ## Purpose
-Build a Telegram-first data labeling marketplace that lets clients spin up labeling projects, fund them, and receive labeled datasets within days while remote workers earn through Telegram bots and a mini-app. The immediate goal is to launch an MVP within 7 days and reach first revenue by connecting both sides quickly.
+LabelMint is a comprehensive Telegram-first data labeling marketplace that enables businesses to create high-quality training data through distributed workers. The platform connects clients needing labeled data with remote workers operating through Telegram bots and mini-apps, with TON/USDT micropayments for transparent compensation.
 
 ## Tech Stack
-- TypeScript everywhere within a `pnpm` workspace monorepo
-- `grammy`-based Telegram bots for clients and workers
-- React 19 + Vite mini app using Telegram Web App SDK (@twa-dev/sdk, @telegram-apps/sdk-react)
-- Express REST backend with direct PostgreSQL connection (pg) and Redis client
-- PostgreSQL 16 (primary datastore) and Redis 7 (task reservations, queues)
-- Docker Compose for local orchestration
-- TON blockchain integration (@ton/core, @ton/crypto, @ton/ton) for crypto payments
-- Stripe / Telegram Payments for deposits, manual payouts initially
-- OCR capabilities via Tesseract.js for text recognition tasks
-- Image annotation via Konva.js + react-konva for bounding box tasks
-- Future: Wise API, TON/USDT payouts, Claude API assistive labeling
+- **Runtime**: Node.js 20+ with TypeScript 5.7+ across all packages
+- **Package Manager**: pnpm 9.15.1+ with workspace monorepo structure
+- **Frontend**: Next.js 15+ (web app), React 19 + Vite (Telegram mini-app), Tailwind CSS
+- **Backend**: Express.js microservices with PostgreSQL 15+ and Redis 7+
+- **Database**: Prisma ORM with unified schema, PostgreSQL primary, Redis for caching/queues
+- **Blockchain**: TON SDK for USDT micropayments, smart contracts for escrow
+- **Telegram**: Grammy bots for client/worker interactions, Telegram Web App SDK
+- **Infrastructure**: Docker, Kubernetes, AWS, monitoring with Prometheus/Grafana
+- **Testing**: Vitest, Playwright, Jest with comprehensive test coverage
+- **AI/ML**: Tesseract.js for OCR, Konva.js for image annotation, future Claude integration
 
 ## Project Conventions
 
 ### Code Style
-- TypeScript `strict` mode across packages; favor explicit return types on exported functions
-- ESLint with `@typescript-eslint` presets and shared config published from `/shared`
-- Prettier with default 2-space indentation; no semicolons in React components, semicolons allowed elsewhere
-- Components and classes use PascalCase, functions and variables use camelCase, constants adopting SCREAMING_SNAKE_CASE
+- TypeScript `strict` mode with explicit return types on exported functions
+- ESLint 9+ with `@typescript-eslint` presets and shared configurations
+- Prettier with 2-space indentation, no semicolons in React components
+- PascalCase for components/classes, camelCase for functions/variables, SCREAMING_SNAKE_CASE for constants
+- File naming: kebab-case for files, descriptive names with clear purpose
 
 ### Architecture Patterns
-- Monorepo layout: `/telegram-labeling-platform/bot`, `/telegram-labeling-platform/mini-app`, `/telegram-labeling-platform/backend`, `/telegram-labeling-platform/shared` with shared types/utilities published via local workspace versions
-- Backend exposes REST endpoints (`/api/tasks`, `/api/projects`, `/api/v1/...`) consumed by bots, mini-app, and external clients
-- Bots remain thin: validate commands, delegate business rules to backend, communicate via webhooks in production and long polling locally
-- Task distribution relies on Redis-backed reservation locks and honeypot tagging; consensus logic centralised in backend services
-- Mini-app uses React Router for navigation, Telegram UI components (@telegram-apps/telegram-ui) for native feel
-- Direct database connections without ORM for performance: pg for PostgreSQL, redis for caching/queues
-- Future enhancements (Claude assistive labeling, payouts) integrate as composable service modules behind clear interfaces
+- **Monorepo Structure**: `apps/` (Next.js applications), `services/` (Express backends), `packages/` (shared libraries)
+- **Microservices**: Independent services with clear boundaries and API contracts
+- **Event-Driven**: Asynchronous communication via message queues and event bus
+- **API-First**: RESTful APIs with OpenAPI documentation and versioning
+- **Database per Service**: Each service owns its data with clear interfaces
+- **Shared Packages**: Common utilities, types, and UI components via `@labelmint/*` aliases
 
 ### Testing Strategy
-- Custom Node.js test scripts in `/test` directory: endpoints.test.js, enhanced-features-test.js, ai-features-test.js, growth-automation-test.js, viral-features-test.js
-- Manual QA sessions for Telegram bot flows and mini-app UX during daily development cadence
-- Database initialization via bot/scripts/init-db.sql for Docker Compose setup
-- Test data seeding via bot/scripts/init-db.ts for development environments
-- Future: CI/CD pipeline with automated testing before deployment
+- **Test Pyramid**: 70% unit tests, 20% integration tests, 10% E2E tests
+- **Unit Tests**: Vitest with comprehensive coverage for business logic
+- **Integration Tests**: API endpoints, database operations, service communication
+- **E2E Tests**: Playwright for user journeys and critical workflows
+- **Test Data**: Factories and fixtures for consistent test data generation
+- **CI/CD**: Automated testing with GitHub Actions and quality gates
 
 ### Git Workflow
-- Trunk-based around `main`; short-lived feature branches prefixed by scope (`bot/`, `backend/`, `mini-app/`, `infra/`)
-- Prefer pull requests even for solo work to document context; urgent fixes may fast-forward with self-review
-- Conventional Commits (`feat:`, `fix:`, `chore:` etc.) for consistent history and automated changelog potential
+- **Branch Strategy**: Trunk-based development with feature branches
+- **Naming**: `feature/`, `hotfix/`, `release/` prefixes with descriptive names
+- **Commits**: Conventional Commits format (`feat:`, `fix:`, `chore:`, etc.)
+- **Reviews**: Required PR reviews with automated checks and quality gates
+- **Protection**: Branch protection rules for main branches with required status checks
 
 ## Domain Context
-- Marketplace connects clients needing labeled data (image/text classification, bounding boxes, transcription) with distributed workers operating inside Telegram
-- Pricing: client pays $0.05 per label, worker earns $0.02, platform retains $0.03 margin; invoices handled via Telegram Payments / Stripe
-- Quality pipeline: each task needs three labels, consensus at 2/3; conflicting labels trigger extra reviewers; honeypot tasks evaluate worker accuracy
-- Worker lifecycle: Telegram registration, balance tracking, manual withdrawals (bank/crypto) until automation completes; trust score impacts task allocation
-- Client onboarding flow includes dataset ingestion (file upload or links), category definition, automatic task creation, and real-time progress dashboards
-- Supported task types: image classification, text classification, bounding box annotation (via Konva), text transcription/OCR (via Tesseract.js)
-- Future roadmap includes RLHF tasks, enterprise API access, multilingual bots, AI-assisted pre-labeling, and gamified worker incentives
+- **Core Business**: Data labeling marketplace connecting clients with distributed workers
+- **Pricing Model**: Client pays per label, worker earns micropayments, platform takes margin
+- **Quality Assurance**: Multi-worker consensus, honeypot tasks, accuracy scoring
+- **Payment System**: TON/USDT micropayments with smart contract escrow
+- **Task Types**: Image classification, text classification, bounding boxes, transcription, RLHF
+- **Worker Management**: Telegram-based onboarding, skill assessment, reputation scoring
+- **Client Experience**: Project creation, dataset upload, real-time progress tracking
 
 ## Important Constraints
-- MVP must ship inside 7 days; prioritize working vertical slices over full feature completeness
-- Telegram Bot API rate limits apply; need webhook hosting for production and secure secret storage
-- Handle payments compliantly; Stripe/Telegram invoices must match delivered label counts and transaction records in PostgreSQL
-- Data privacy: datasets may contain sensitive client content; ensure secure storage and controlled access for workers
-- System must scale to thousands of concurrent micro-tasks; reservation logic must prevent double assignment and honor 30-second holds
-- Reliability of consensus metrics directly affects payouts and client trust—avoid regressions when iterating
+- **Performance**: Sub-200ms response times, horizontal scaling capability
+- **Security**: End-to-end encryption, audit trails, compliance with data privacy laws
+- **Reliability**: 99.9% uptime, fault tolerance, graceful degradation
+- **Scalability**: Handle thousands of concurrent tasks and users
+- **Compliance**: Financial regulations, data protection, audit requirements
+- **User Experience**: Intuitive interfaces, mobile-first design, accessibility
 
 ## External Dependencies
-- Telegram Bot API (client and worker bots) and Telegram Web App SDK
-- Grammy ecosystem for bot development (@grammyjs/conversations, @grammyjs/menu, @grammyjs/sessions)
-- Stripe (via Telegram Payments provider) for client deposits
-- PostgreSQL 16 (primary database) and Redis 7 (reservations, queues, caching)
-- OCR processing: Tesseract.js for text recognition tasks
-- Image annotation: Konva.js + react-konva for bounding box drawing
-- TON blockchain infrastructure (@ton/core, @ton/crypto, @ton/ton, @tonconnect/sdk)
-- Deployment platforms: Railway (bot), Vercel (mini-app), Fly.io (backend)
-- Future integrations: Wise API (bank payouts), USDT blockchain payments, Claude API for pre-labeling and validation, Google Drive ingestion for datasets
+- **Telegram**: Bot API, Web App SDK, payment processing
+- **Blockchain**: TON network, USDT tokens, smart contracts
+- **Cloud**: AWS infrastructure, S3 storage, managed databases
+- **Monitoring**: Prometheus, Grafana, Sentry for observability
+- **Development**: Docker, Kubernetes, GitHub Actions for CI/CD
+- **Future**: Claude API for AI assistance, Wise API for bank payouts
 
 ## Development Environment
-- Node.js >=20.0.0 and pnpm >=9.0.0 required (see package.json engines)
-- Use `pnpm run docker:up` to start PostgreSQL and Redis containers locally
-- Environment variables: Copy `.env.example` to appropriate `.env` files in each package
-- Local development scripts:
-  - `pnpm run dev` - Start all services in watch mode
-  - `pnpm run bot:dev`, `pnpm run backend:dev`, `pnpm run mini-app:dev` - Start individual services
-  - `pnpm run test:all` - Run all test suites (endpoints, enhanced features, AI features, growth automation, viral features)
-- Database schema initialized via Docker Compose entrypoint: `bot/scripts/init-db.sql`
-- Shared package (`@telegram-labeling/shared`) contains common types and utilities
+- **Requirements**: Node.js 20+, pnpm 9.15.1+, Docker, Git
+- **Setup**: `pnpm install` → `pnpm run dev` for full development environment
+- **Services**: PostgreSQL, Redis, MinIO via Docker Compose
+- **Scripts**: 
+  - `pnpm run dev` - Start all services
+  - `pnpm run test` - Run test suites
+  - `pnpm run lint` - Code quality checks
+  - `pnpm run type-check` - TypeScript validation
+- **Database**: Prisma migrations and seeding for development data
+- **Shared Packages**: `@labelmint/shared`, `@labelmint/ui` for common functionality
 
 ## Project Structure
 ```
-telegram-labeling-platform/
-├── bot/                 # Grammy Telegram bot source code
-│   ├── src/
-│   │   ├── scripts/     # Database initialization scripts
-│   │   └── server.ts    # Webhook server for production
-│   └── Dockerfile
-├── backend/             # Express REST API
-│   └── src/
-├── mini-app/           # React 19 + Vite Telegram Mini App
-│   └── src/
-├── shared/             # Shared TypeScript types and utilities
-│   └── src/
-├── test/               # Integration and feature test suites
-├── contracts/          # Smart contracts (future TON integration)
-├── docs/               # Project documentation
-├── docker-compose.yml  # Local development orchestration
-└── pnpm-workspace.yaml # Monorepo workspace configuration
+labelmint/
+├── apps/                          # Frontend applications
+│   ├── web/                      # Next.js main web application
+│   ├── admin/                     # Next.js admin dashboard
+│   └── telegram-mini-app/        # Vite + React Telegram mini-app
+├── services/                     # Backend microservices
+│   ├── api-gateway/              # API Gateway with routing
+│   ├── labeling-backend/         # Core task management service
+│   ├── payment-backend/          # TON/USDT payment processing
+│   ├── bots/                     # Telegram bot services
+│   ├── enterprise-api/           # Enterprise features
+│   ├── workflow-engine/          # Workflow automation
+│   ├── collaboration-service/    # Team collaboration
+│   ├── analytics-engine/         # Analytics and reporting
+│   └── white-label-service/      # White-label customization
+├── packages/                     # Shared packages
+│   ├── shared/                   # Common utilities and types
+│   └── ui/                       # Reusable UI components
+├── config/                       # Configuration files
+├── infrastructure/               # Infrastructure as code
+├── docs/                         # Documentation
+├── tests/                        # Global test configuration
+├── scripts/                      # Utility scripts
+└── openspec/                     # OpenSpec specifications
 ```

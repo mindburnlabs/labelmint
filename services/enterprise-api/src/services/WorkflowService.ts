@@ -6,10 +6,27 @@ import {
   ExecutionStatus,
   WorkflowStats
 } from '../types/workflow.js'
-import { prisma, redis } from '../app.js'
+import { prisma } from '../app.js'
 import { logger } from '../utils/logger.js'
 import { AuditService } from './AuditService.js'
-import { v4 as uuidv4 } from 'uuid'
+import type { WorkflowDefinition } from '../types/workflow.js'
+
+interface WorkflowDetail extends WorkflowDefinition {
+  creator?: {
+    id: string
+    email?: string | null
+    firstName?: string | null
+    lastName?: string | null
+  }
+  recentExecutions: Array<{
+    id: string
+    status: ExecutionStatus
+    startedAt: Date
+    completedAt?: Date | null
+    duration?: number | null
+    error?: string | null
+  }>
+}
 
 export class WorkflowService {
   /**
@@ -80,6 +97,61 @@ export class WorkflowService {
     }
 
     return this.mapToWorkflowDefinition(workflow)
+  }
+
+  static async getDetailedWorkflow(id: string, organizationId: string): Promise<WorkflowDetail | null> {
+    const workflow = await prisma.workflow.findFirst({
+      where: { id, organizationId },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true
+          }
+        },
+        executions: {
+          orderBy: { startTime: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            status: true,
+            startTime: true,
+            endTime: true,
+            duration: true,
+            error: true
+          }
+        }
+      }
+    })
+
+    if (!workflow) {
+      return null
+    }
+
+    const definition = this.mapToWorkflowDefinition(workflow)
+    const recentExecutions = (workflow.executions || []).map(exec => ({
+      id: exec.id,
+      status: exec.status.toLowerCase() as ExecutionStatus,
+      startedAt: exec.startTime,
+      completedAt: exec.endTime,
+      duration: exec.duration ?? null,
+      error: exec.error
+    }))
+
+    return {
+      ...definition,
+      creator: workflow.creator
+        ? {
+            id: workflow.creator.id,
+            email: workflow.creator.email,
+            firstName: workflow.creator.firstName,
+            lastName: workflow.creator.lastName
+          }
+        : undefined,
+      recentExecutions
+    }
   }
 
   /**
@@ -154,7 +226,7 @@ export class WorkflowService {
     ])
 
     return {
-      workflows: workflows.map(w => ({
+      workflows: workflows.map((w: any) => ({
         ...this.mapToWorkflowDefinition(w),
         executionCount: w._count.executions
       })),
@@ -269,37 +341,111 @@ export class WorkflowService {
       throw new Error('Workflow is not active')
     }
 
-    // Create execution context
-    const context = {
-      metadata: {
+    const startTime = new Date()
+    const executionRecord = await prisma.workflowExecution.create({
+      data: {
+        workflowId: id,
         organizationId,
-        userId
-      }
-    }
-
-    // Execute workflow
-    const execution = await workflowEngine.execute(
-      id,
-      input,
-      context,
-      userId,
-      'manual'
-    )
-
-    // Log audit event
-    await AuditService.log({
-      organizationId,
-      userId,
-      action: 'workflow.executed',
-      resourceType: 'workflow',
-      resourceId: id,
-      details: {
-        executionId: execution.id,
-        input
+        triggeredBy: userId,
+        triggeredByType: 'MANUAL',
+        status: 'RUNNING',
+        input,
+        startTime,
+        context: {
+          metadata: {
+            organizationId,
+            userId
+          }
+        }
       }
     })
 
-    return execution
+    try {
+      const context = {
+        metadata: {
+          organizationId,
+          userId
+        }
+      }
+
+      const executionResult = await workflowEngine.execute(
+        id,
+        input,
+        context,
+        userId,
+        'manual'
+      )
+
+      const endTime = new Date()
+      const duration = endTime.getTime() - startTime.getTime()
+
+      await prisma.workflowExecution.update({
+        where: { id: executionRecord.id },
+        data: {
+          status: 'COMPLETED',
+          endTime,
+          duration,
+          output: executionResult?.output ?? {},
+          logs: executionResult?.logs ?? [],
+          error: null
+        }
+      })
+
+      await AuditService.log({
+        organizationId,
+        userId,
+        action: 'workflow.executed',
+        resourceType: 'workflow',
+        resourceId: id,
+        details: {
+          executionId: executionRecord.id,
+          input
+        }
+      })
+
+      return {
+        id: executionRecord.id,
+        workflowId: id,
+        workflowVersion: workflow.version,
+        status: 'completed',
+        input,
+        output: executionResult?.output ?? {},
+        context: context,
+        startedAt: startTime,
+        completedAt: endTime,
+        duration,
+        triggeredBy: userId,
+        triggeredByType: 'manual',
+        error: undefined,
+        nodeId: undefined,
+        logs: executionResult?.logs ?? []
+      }
+    } catch (error) {
+      const endTime = new Date()
+      await prisma.workflowExecution.update({
+        where: { id: executionRecord.id },
+        data: {
+          status: 'FAILED',
+          endTime,
+          duration: endTime.getTime() - startTime.getTime(),
+          error: error instanceof Error ? error.message : 'Workflow execution failed'
+        }
+      })
+
+      await AuditService.log({
+        organizationId,
+        userId,
+        action: 'workflow.failed',
+        resourceType: 'workflow',
+        resourceId: id,
+        details: {
+          executionId: executionRecord.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      })
+
+      throw error
+    }
   }
 
   /**
@@ -361,7 +507,7 @@ export class WorkflowService {
     ])
 
     return {
-      executions: executions.map(e => ({
+      executions: executions.map((e: any) => ({
         id: e.id,
         workflowId: e.workflowId,
         status: e.status.toLowerCase() as ExecutionStatus,
@@ -383,7 +529,7 @@ export class WorkflowService {
    */
   static async getStats(
     id: string,
-    organizationId: string,
+    _organizationId: string,
     days: number = 30
   ): Promise<WorkflowStats> {
     return await workflowEngine.getWorkflowStats(id, days)
@@ -394,12 +540,12 @@ export class WorkflowService {
    */
   static async createTemplate(
     organizationId: string,
-    data: Partial<WorkflowTemplate>,
+    data: Partial<WorkflowTemplate> & { workflowId: string },
     userId: string
   ): Promise<WorkflowTemplate> {
     const template = await prisma.workflowTemplate.create({
       data: {
-        workflowId: data.workflowId!,
+        workflowId: data.workflowId,
         name: data.name!,
         description: data.description!,
         category: data.category!,
@@ -486,9 +632,7 @@ export class WorkflowService {
       throw new Error('Workflow not found')
     }
 
-    const duplicated = await this.create(
-      organizationId,
-      {
+    const duplicateData: any = {
         name,
         description: `Duplicate of: ${original.description || original.name}`,
         nodes: original.nodes,
@@ -496,9 +640,16 @@ export class WorkflowService {
         variables: original.variables,
         settings: original.settings,
         triggers: original.triggers,
-        category: original.category,
         tags: original.tags
-      },
+      }
+
+      if (original.category) {
+        duplicateData.category = original.category
+      }
+
+    const duplicated = await this.create(
+      organizationId,
+      duplicateData,
       userId
     )
 
@@ -564,7 +715,6 @@ export class WorkflowService {
   private static mapToWorkflowTemplate(template: any): WorkflowTemplate {
     return {
       id: template.id,
-      workflowId: template.workflowId,
       name: template.name,
       description: template.description,
       category: template.category,
@@ -575,7 +725,8 @@ export class WorkflowService {
       reviews: [], // TODO: Load reviews separately
       createdBy: template.createdBy,
       createdAt: template.createdAt,
-      updatedAt: template.updatedAt
+      updatedAt: template.updatedAt,
+      definition: template.definition || template.workflow?.definition || {}
     }
   }
 }

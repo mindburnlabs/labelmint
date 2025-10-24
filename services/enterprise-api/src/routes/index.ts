@@ -1,13 +1,15 @@
 import { Application } from 'express'
-import organizationRoutes from './organizations.js'
-import teamRoutes from './teams.js'
-import ssoRoutes from './sso.js'
-// import userRoutes from './users.js'
-// import projectRoutes from './projects.js'
-// import workflowRoutes from './workflows.js'
-// import analyticsRoutes from './analytics.js'
-// import billingRoutes from './billing.js'
-// import integrationRoutes from './integrations.js'
+import organizationRoutes from './organizations'
+import teamRoutes from './teams'
+import ssoRoutes from './sso'
+import userRoutes from './users'
+import projectRoutes from './projects'
+import workflowRoutes from './workflows'
+import analyticsRoutes from './analytics'
+import billingRoutes from './billing'
+import integrationRoutes from './integrations'
+import directoryRoutes from './directory'
+import complianceRoutes from './compliance'
 
 export function setupRoutes(app: Application, basePath: string): void {
   // Organization routes
@@ -19,13 +21,15 @@ export function setupRoutes(app: Application, basePath: string): void {
   // SSO routes
   app.use(`${basePath}`, ssoRoutes)
 
-  // TODO: Add other route modules as they are created
-  // app.use(`${basePath}/users`, userRoutes)
-  // app.use(`${basePath}/projects`, projectRoutes)
-  // app.use(`${basePath}/workflows`, workflowRoutes)
-  // app.use(`${basePath}/analytics`, analyticsRoutes)
-  // app.use(`${basePath}/billing`, billingRoutes)
-  // app.use(`${basePath}/integrations`, integrationRoutes)
+  // API routes
+  app.use(`${basePath}`, userRoutes)
+  app.use(`${basePath}`, projectRoutes)
+  app.use(`${basePath}`, workflowRoutes)
+  app.use(`${basePath}`, analyticsRoutes)
+  app.use(`${basePath}/billing`, billingRoutes)
+  app.use(`${basePath}/integrations`, integrationRoutes)
+  app.use(`${basePath}`, directoryRoutes)
+  app.use(`${basePath}`, complianceRoutes)
 
   // API documentation endpoint
   app.get(`${basePath}`, (req, res) => {
@@ -37,12 +41,14 @@ export function setupRoutes(app: Application, basePath: string): void {
         organizations: `${basePath}/organizations`,
         teams: `${basePath}/organizations/:organizationId/teams`,
         sso: `${basePath}/organizations/:organizationId/sso`,
-        users: `${basePath}/users`, // TODO
-        projects: `${basePath}/projects`, // TODO
-        workflows: `${basePath}/workflows`, // TODO
-        analytics: `${basePath}/analytics`, // TODO
-        billing: `${basePath}/billing`, // TODO
-        integrations: `${basePath}/integrations`, // TODO
+        users: `${basePath}/organizations/:organizationId/users`,
+        projects: `${basePath}/organizations/:organizationId/projects`,
+        workflows: `${basePath}/workflows`,
+        analytics: `${basePath}/analytics`,
+        billing: `${basePath}/billing`,
+        integrations: `${basePath}/integrations`,
+        directory: `${basePath}/organizations/:organizationId/directory`,
+        compliance: `${basePath}/organizations/:organizationId/compliance`,
       },
       documentation: `${basePath}/docs`, // TODO
       health: '/health'

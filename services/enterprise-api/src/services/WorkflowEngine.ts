@@ -5,12 +5,10 @@ import {
   ExecutionStatus,
   RuntimeContext,
   WorkflowLogger,
-  WorkflowEvent,
   ExecutionContext
 } from '../types/workflow.js'
-import { prisma, redis } from '../app.js'
+import { prisma } from '../app.js'
 import { logger } from '../utils/logger.js'
-import { AuditService } from './AuditService.js'
 import { v4 as uuidv4 } from 'uuid'
 
 export class WorkflowEngine extends EventEmitter {
@@ -77,9 +75,9 @@ export class WorkflowEngine extends EventEmitter {
         secrets: context.secrets || {},
         metadata: {
           organizationId: context.metadata?.organizationId || '',
-          userId: context.metadata?.userId,
-          teamId: context.metadata?.teamId,
-          projectId: context.metadata?.projectId
+          ...(context.metadata?.userId && { userId: context.metadata.userId }),
+          ...(context.metadata?.teamId && { teamId: context.metadata.teamId }),
+          ...(context.metadata?.projectId && { projectId: context.metadata.projectId })
         }
       },
       startedAt: new Date(),
@@ -157,7 +155,7 @@ export class WorkflowEngine extends EventEmitter {
     return {
       id: execution.id,
       workflowId: execution.workflowId,
-      workflowVersion: 1, // TODO: Store version in DB
+      workflowVersion: execution.workflowVersion || 1,
       status: execution.status as ExecutionStatus,
       input: execution.input as Record<string, any>,
       output: execution.output as Record<string, any>,
@@ -169,7 +167,7 @@ export class WorkflowEngine extends EventEmitter {
       triggeredByType: execution.triggeredByType as any,
       error: execution.error || undefined,
       nodeId: execution.nodeId || undefined,
-      logs: [] // TODO: Load logs separately
+      logs: await this.loadExecutionLogs(execution.id)
     }
   }
 
@@ -314,7 +312,7 @@ export class WorkflowEngine extends EventEmitter {
 
       // Execute trigger node
       const triggerNode = triggerNodes[0]
-      await this.executeNode(triggerNode, context)
+      await this.executeNode(triggerNode.id, context)
 
       // Find next nodes to execute
       await this.executeNextNodes(triggerNode.id, context)
@@ -335,25 +333,26 @@ export class WorkflowEngine extends EventEmitter {
       })
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       context.execution.status = 'failed'
-      context.execution.error = error.message
+      context.execution.error = errorMessage
       context.execution.completedAt = new Date()
       context.execution.duration = Date.now() - context.execution.startedAt.getTime()
 
       await this.updateExecution(context.execution)
-      await context.logger.error('Workflow execution failed', error)
+      await context.logger.error('Workflow execution failed', errorMessage)
 
       this.emit('workflow:failed', {
         type: 'workflow.failed',
         workflowId: context.execution.workflowId,
         executionId: context.execution.id,
-        data: { error: error.message }
+        data: { error: errorMessage }
       })
 
       throw error
     } finally {
       // Flush any remaining logs
-      await (context.logger as WorkflowRuntimeLogger).flushBatch(context.execution.id)
+      await (context.logger as WorkflowRuntimeLogger).flushLogs(context.execution.id)
 
       // Clean up
       this.executions.delete(context.execution.id)
@@ -505,6 +504,34 @@ export class WorkflowEngine extends EventEmitter {
   }
 
   /**
+   * Load execution logs
+   */
+  private async loadExecutionLogs(executionId: string): Promise<any[]> {
+    try {
+      const logs = await prisma.workflowExecutionLog.findMany({
+        where: { executionId },
+        orderBy: { createdAt: 'asc' },
+        take: 1000 // Limit to prevent memory issues
+      })
+
+      return logs.map(log => ({
+        id: log.id,
+        level: log.level,
+        message: log.message,
+        data: log.data,
+        nodeId: log.nodeId,
+        timestamp: log.createdAt
+      }))
+    } catch (error) {
+      logger.error('Failed to load execution logs', {
+        executionId,
+        error: error.message
+      })
+      return []
+    }
+  }
+
+  /**
    * Get workflow definition
    */
   private async getWorkflow(workflowId: string): Promise<WorkflowDefinition | null> {
@@ -543,6 +570,7 @@ export class WorkflowEngine extends EventEmitter {
       data: {
         id: execution.id,
         workflowId: execution.workflowId,
+        workflowVersion: execution.workflowVersion,
         organizationId: execution.context.metadata.organizationId,
         triggeredBy: execution.triggeredBy,
         triggeredByType: execution.triggeredByType,
@@ -670,6 +698,10 @@ class WorkflowRuntimeLogger implements WorkflowLogger {
     }
   }
 
+  public async flushLogs(executionId: string): Promise<void> {
+    await this.flushBatch(executionId)
+  }
+
   private async flushBatch(executionId: string): Promise<void> {
     const batch = WorkflowRuntimeLogger.logBatch.get(executionId)
     if (!batch || batch.length === 0) return
@@ -690,7 +722,7 @@ class WorkflowRuntimeLogger implements WorkflowLogger {
       }))
 
       // Bulk insert using Prisma
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         for (const log of logsToInsert) {
           await tx.workflowExecutionLog.create({
             data: log
@@ -702,7 +734,7 @@ class WorkflowRuntimeLogger implements WorkflowLogger {
     } catch (error) {
       logger.error('Failed to flush workflow logs batch', {
         executionId,
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
         batchSize: batch.length
       })
 
@@ -728,12 +760,15 @@ class WorkflowRuntimeLogger implements WorkflowLogger {
 
   private async log(level: string, message: string, data?: any): Promise<void> {
     // Log to Winston
-    logger[level]('Workflow log', {
-      executionId: this.executionId,
-      level,
-      message,
-      data
-    })
+    const loggerMethod = (logger as any)[level] as ((message: string, meta?: any) => void)
+    if (typeof loggerMethod === 'function') {
+      loggerMethod('Workflow log', {
+        executionId: this.executionId,
+        level,
+        message,
+        data
+      })
+    }
 
     // Store in database (batch for performance)
     await this.batchLog({
@@ -743,6 +778,246 @@ class WorkflowRuntimeLogger implements WorkflowLogger {
       data,
       timestamp: new Date()
     })
+  }
+/**
+   * Get workflow execution statistics
+   */
+  async getExecutionStats(
+    workflowId?: string,
+    organizationId?: string,
+    days: number = 30
+  ): Promise<{
+    totalExecutions: number
+    successfulExecutions: number
+    failedExecutions: number
+    averageExecutionTime: number
+    successRate: number
+    dailyStats: Array<{ date: string; executions: number; successes: number; failures: number }>
+  }> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+    const whereClause: any = { startTime: { gte: since } }
+    if (workflowId) whereClause.workflowId = workflowId
+    if (organizationId) whereClause.organizationId = organizationId
+
+    const [total, successful, failed, avgTime] = await Promise.all([
+      prisma.workflowExecution.count({ where: whereClause }),
+      prisma.workflowExecution.count({
+        where: { ...whereClause, status: 'completed' }
+      }),
+      prisma.workflowExecution.count({
+        where: { ...whereClause, status: 'failed' }
+      }),
+      prisma.workflowExecution.aggregate({
+        where: { ...whereClause, duration: { not: null } },
+        _avg: { duration: true }
+      })
+    ])
+
+    // Get daily statistics
+    const dailyStats = await prisma.$queryRaw`
+      SELECT
+        DATE(startTime) as date,
+        COUNT(*) as executions,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as successes,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failures
+      FROM WorkflowExecution
+      WHERE startTime >= ${since}
+      ${workflowId ? prisma.$queryRaw`AND workflowId = ${workflowId}` : prisma.$queryRaw``}
+      ${organizationId ? prisma.$queryRaw`AND organizationId = ${organizationId}` : prisma.$queryRaw``}
+      GROUP BY DATE(startTime)
+      ORDER BY date DESC
+    ` as any[]
+
+    return {
+      totalExecutions: total,
+      successfulExecutions: successful,
+      failedExecutions: failed,
+      averageExecutionTime: avgTime._avg.duration || 0,
+      successRate: total > 0 ? (successful / total) * 100 : 0,
+      dailyStats: dailyStats.map(stat => ({
+        date: stat.date,
+        executions: Number(stat.executions),
+        successes: Number(stat.successes),
+        failures: Number(stat.failures)
+      }))
+    }
+  }
+
+  /**
+   * Get workflow performance metrics
+   */
+  async getPerformanceMetrics(workflowId: string): Promise<{
+    averageNodeExecutionTime: Record<string, number>
+    mostUsedNodes: Array<{ nodeId: string; count: number; avgTime: number }>
+    errorRates: Record<string, number>
+    bottlenecks: Array<{ nodeId: string; avgTime: number; errorRate: number }>
+  }> {
+    const metrics = await prisma.workflowExecutionLog.groupBy({
+      by: ['nodeId'],
+      where: {
+        workflowId,
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      },
+      _count: { id: true },
+      _avg: { duration: true }
+    })
+
+    const errorMetrics = await prisma.workflowExecutionLog.groupBy({
+      by: ['nodeId'],
+      where: {
+        workflowId,
+        level: 'error',
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      },
+      _count: { id: true }
+    })
+
+    const nodeTimes = metrics.reduce((acc: Record<string, number>, metric: any) => {
+      if (metric.nodeId) {
+        acc[metric.nodeId] = metric._avg.duration || 0
+      }
+      return acc
+    }, {} as Record<string, number>)
+
+    const nodeErrors = errorMetrics.reduce((acc: Record<string, number>, error: any) => {
+      if (error.nodeId) {
+        acc[error.nodeId] = error._count.id
+      }
+      return acc
+    }, {} as Record<string, number>)
+
+    const mostUsedNodes = metrics
+      .filter((m: any) => m.nodeId)
+      .map((m: any) => ({
+        nodeId: m.nodeId!,
+        count: m._count.id,
+        avgTime: m._avg.duration || 0
+      }))
+      .sort((a: any, b: any) => b.count - a.count)
+      .slice(0, 10)
+
+    const bottlenecks = Object.keys(nodeTimes)
+      .map(nodeId => ({
+        nodeId,
+        avgTime: nodeTimes[nodeId],
+        errorRate: nodeErrors[nodeId] ? (nodeErrors[nodeId] / (metrics.find((m: any) => m.nodeId === nodeId)?._count.id || 1)) * 100 : 0
+      }))
+      .sort((a: any, b: any) => (b.avgTime * (1 + b.errorRate / 100)) - (a.avgTime * (1 + a.errorRate / 100)))
+      .slice(0, 5)
+
+    return {
+      averageNodeExecutionTime: nodeTimes,
+      mostUsedNodes,
+      errorRates: nodeErrors,
+      bottlenecks
+    }
+  }
+
+  /**
+   * Create workflow snapshot for versioning
+   */
+  async createSnapshot(workflowId: string, description?: string): Promise<{
+    id: string
+    version: number
+    description: string
+    createdAt: Date
+  }> {
+    const workflow = await prisma.workflow.findUnique({
+      where: { id: workflowId }
+    })
+
+    if (!workflow) {
+      throw new Error('Workflow not found')
+    }
+
+    // Create new version
+    const newVersion = (workflow.version || 1) + 1
+
+    // Create snapshot
+    const snapshot = await prisma.workflowSnapshot.create({
+      data: {
+        workflowId,
+        version: newVersion,
+        description: description || `Version ${newVersion} snapshot`,
+        definition: workflow.definition,
+        settings: workflow.settings || {},
+        createdBy: workflow.createdBy
+      }
+    })
+
+    // Update workflow version
+    await prisma.workflow.update({
+      where: { id: workflowId },
+      data: { version: newVersion }
+    })
+
+    logger.info('Workflow snapshot created', {
+      workflowId,
+      version: newVersion,
+      snapshotId: snapshot.id
+    })
+
+    return {
+      id: snapshot.id,
+      version: newVersion,
+      description: snapshot.description,
+      createdAt: snapshot.createdAt
+    }
+  }
+
+  /**
+   * Restore workflow from snapshot
+   */
+  async restoreFromSnapshot(snapshotId: string): Promise<void> {
+    const snapshot = await prisma.workflowSnapshot.findUnique({
+      where: { id: snapshotId }
+    })
+
+    if (!snapshot) {
+      throw new Error('Snapshot not found')
+    }
+
+    // Update workflow with snapshot data
+    await prisma.workflow.update({
+      where: { id: snapshot.workflowId },
+      data: {
+        definition: snapshot.definition,
+        settings: snapshot.settings,
+        version: snapshot.version
+      }
+    })
+
+    logger.info('Workflow restored from snapshot', {
+      workflowId: snapshot.workflowId,
+      snapshotId,
+      version: snapshot.version
+    })
+  }
+
+  /**
+   * Get workflow version history
+   */
+  async getVersionHistory(workflowId: string): Promise<Array<{
+    id: string
+    version: number
+    description: string
+    createdAt: Date
+    createdBy: string
+  }>> {
+    const snapshots = await prisma.workflowSnapshot.findMany({
+      where: { workflowId },
+      orderBy: { version: 'desc' },
+      take: 50
+    })
+
+    return snapshots.map((snapshot: any) => ({
+      id: snapshot.id,
+      version: snapshot.version,
+      description: snapshot.description,
+      createdAt: snapshot.createdAt,
+      createdBy: snapshot.createdBy
+    }))
   }
 }
 

@@ -3,18 +3,56 @@
     "../../config/shared/tsconfig.app.json",
     "../../config/shared/tsconfig.paths.json"
   ],
-  "compilerOptions": {},
+  "compilerOptions": {
+    "jsx": "preserve",
+    "strict": true,
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/styles/*": ["./styles/*"],
+      "@/public/*": ["./public/*"],
+      "@labelmint/ui": ["../../packages/ui/src"],
+      "@labelmint/shared": ["../../packages/shared/src"]
+    }
+  },
   "include": [
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
     ".next",
-    "coverage"
+    "coverage",
+    "tests/**/*.test.ts",
+    "tests/**/*.test.tsx"
   ]
 }

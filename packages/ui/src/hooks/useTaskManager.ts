@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getApiService } from '../services/apiService';
 
 export interface Task {
   id: string;
@@ -11,6 +12,9 @@ export interface Task {
   config?: Record<string, any>;
   mediaUrl?: string;
   mediaType?: string;
+  title?: string;
+  description?: string;
+  options?: string[];
 }
 
 export interface TaskSubmission {
@@ -23,6 +27,7 @@ export interface UseTaskManagerOptions {
   onTaskComplete?: () => void;
   autoFetch?: boolean;
   timerInterval?: number;
+  useApiService?: boolean;
 }
 
 export interface UseTaskManagerReturn {
@@ -49,6 +54,7 @@ export function useTaskManager({
   onTaskComplete,
   autoFetch = true,
   timerInterval = 1000,
+  useApiService = true,
 }: UseTaskManagerOptions = {}): UseTaskManagerReturn {
   // State
   const [task, setTask] = useState<Task | null>(null);
@@ -88,28 +94,68 @@ export function useTaskManager({
     }, timerInterval);
   }, [timerInterval, resetTimer]);
 
-  // Fetch next task (to be implemented with actual API)
+  // Fetch next task
   const fetchNextTask = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API call
-      // const response = await apiService.getNextTask();
-      const mockTask: Task = {
-        id: `task-${Date.now()}`,
-        type: 'classification',
-        data: 'Sample task data',
-        categories: ['option1', 'option2'],
-        points: 100,
-        time_limit_seconds: 300,
-      };
+      if (useApiService) {
+        // Use real API service
+        try {
+          const apiService = getApiService();
+          const response = await apiService.getNextTask();
+          
+          if (response.success && response.task) {
+            const apiTask = response.task;
+            const task: Task = {
+              id: apiTask.id,
+              type: apiTask.type,
+              sub_type: apiTask.sub_type,
+              data: apiTask.data,
+              categories: apiTask.categories || apiTask.options,
+              points: apiTask.points,
+              time_limit_seconds: apiTask.time_limit_seconds,
+              config: apiTask.config,
+              mediaUrl: apiTask.mediaUrl,
+              mediaType: apiTask.mediaType,
+              title: apiTask.title,
+              description: apiTask.description,
+              options: apiTask.options,
+            };
+            
+            setTask(task);
+            setSelectedAnswer(null);
+            setShowEarning(false);
+            setEarnedAmount(0);
+            startTimer();
+          } else {
+            throw new Error('No tasks available');
+          }
+        } catch (apiError) {
+          // If API service not initialized or fails, fall back to mock
+          console.warn('API service unavailable, using mock data:', apiError);
+          throw apiError;
+        }
+      } else {
+        // Use mock data for development/testing
+        const mockTask: Task = {
+          id: `task-${Date.now()}`,
+          type: 'classification',
+          data: 'Sample task data',
+          categories: ['option1', 'option2'],
+          points: 100,
+          time_limit_seconds: 300,
+          title: 'Sample Classification Task',
+          description: 'This is a sample task for testing',
+        };
 
-      setTask(mockTask);
-      setSelectedAnswer(null);
-      setShowEarning(false);
-      setEarnedAmount(0);
-      startTimer();
+        setTask(mockTask);
+        setSelectedAnswer(null);
+        setShowEarning(false);
+        setEarnedAmount(0);
+        startTimer();
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to fetch task');
       setError(error);
@@ -118,9 +164,9 @@ export function useTaskManager({
     } finally {
       setIsLoading(false);
     }
-  }, [startTimer]);
+  }, [startTimer, useApiService]);
 
-  // Submit answer (to be implemented with actual API)
+  // Submit answer
   const submitAnswer = useCallback(async (answer: any) => {
     if (!task || isSubmitting) return;
 
@@ -128,42 +174,65 @@ export function useTaskManager({
       setIsSubmitting(true);
       setError(null);
 
-      // TODO: Replace with actual API call based on task type
-      // let response;
-      // if (task.type === 'classification') {
-      //   response = await apiService.submitTaskResponse(task.id, answer, timeSpent);
-      // } else if (task.type === 'annotation') {
-      //   response = await apiService.submitAnnotation(task.id, answer);
-      // }
-      // ... other task types
+      if (useApiService) {
+        // Use real API service
+        try {
+          const apiService = getApiService();
+          const response = await apiService.submitTask(task.id, answer, timeSpent);
 
-      // Mock response
-      const mockEarnedAmount = task.points / 100;
-      setEarnedAmount(mockEarnedAmount);
-      setShowEarning(true);
+          if (response.success) {
+            setEarnedAmount(response.pointsEarned);
+            setShowEarning(true);
 
-      // Wait to show earnings
-      setTimeout(() => {
-        resetTimer();
-        onTaskComplete?.();
-        fetchNextTask();
-      }, 1500);
+            // Wait to show earnings
+            setTimeout(() => {
+              resetTimer();
+              onTaskComplete?.();
+              fetchNextTask();
+            }, 1500);
+          } else {
+            throw new Error('Failed to submit task');
+          }
+        } catch (apiError) {
+          console.error('API submit error:', apiError);
+          throw apiError;
+        }
+      } else {
+        // Mock response for development/testing
+        const mockEarnedAmount = task.points / 100;
+        setEarnedAmount(mockEarnedAmount);
+        setShowEarning(true);
+
+        // Wait to show earnings
+        setTimeout(() => {
+          resetTimer();
+          onTaskComplete?.();
+          fetchNextTask();
+        }, 1500);
+      }
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to submit task');
       setError(error);
       console.error('Failed to submit task:', error);
       setIsSubmitting(false);
     }
-  }, [task, isSubmitting, timeSpent, onTaskComplete, fetchNextTask, resetTimer]);
+  }, [task, isSubmitting, timeSpent, onTaskComplete, fetchNextTask, resetTimer, useApiService]);
 
   // Select answer
   const selectAnswer = useCallback((answer: string) => {
     setSelectedAnswer(answer);
-    // TODO: Add haptic feedback if in Telegram
-    // telegramService.hapticSelection();
+    
+    // Add haptic feedback if in Telegram
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+      try {
+        (window as any).Telegram.WebApp.HapticFeedback.selectionChanged();
+      } catch (e) {
+        // Silently fail if haptic feedback not available
+      }
+    }
   }, []);
 
-  // Skip task (to be implemented with actual API)
+  // Skip task
   const skipTask = useCallback(async () => {
     if (!task || isSubmitting) return;
 
@@ -171,8 +240,16 @@ export function useTaskManager({
       setIsSubmitting(true);
       setError(null);
 
-      // TODO: Replace with actual API call
-      // await apiService.skipTask(task.id);
+      if (useApiService) {
+        // Use real API service
+        try {
+          const apiService = getApiService();
+          await apiService.skipTask(task.id);
+        } catch (apiError) {
+          console.error('API skip error:', apiError);
+          // Continue anyway to fetch next task
+        }
+      }
 
       resetTimer();
       fetchNextTask();
@@ -182,7 +259,7 @@ export function useTaskManager({
       console.error('Failed to skip task:', error);
       setIsSubmitting(false);
     }
-  }, [task, isSubmitting, fetchNextTask, resetTimer]);
+  }, [task, isSubmitting, fetchNextTask, resetTimer, useApiService]);
 
   // Reset error
   const resetError = useCallback(() => {

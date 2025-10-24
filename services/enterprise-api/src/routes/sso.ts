@@ -158,4 +158,40 @@ router.post(
   SSOController.logout
 )
 
+/**
+ * @route   GET /sso/templates
+ * @desc    Get available SSO configuration templates
+ * @access  Public
+ */
+router.get(
+  '/sso/templates',
+  SSOController.getTemplates
+)
+
+/**
+ * @route   GET /sso/templates/:provider
+ * @desc    Get specific SSO configuration template
+ * @access  Public
+ */
+router.get(
+  '/sso/templates/:provider',
+  [
+    param('provider').isIn(['azure-ad', 'google-workspace', 'okta', 'active-directory']).withMessage('Invalid provider')
+  ],
+  SSOController.getTemplate
+)
+
+/**
+ * @route   GET /sso/templates/:provider/instructions
+ * @desc    Get setup instructions for SSO provider
+ * @access  Public
+ */
+router.get(
+  '/sso/templates/:provider/instructions',
+  [
+    param('provider').isIn(['azure-ad', 'google-workspace', 'okta', 'active-directory']).withMessage('Invalid provider')
+  ],
+  SSOController.getSetupInstructions
+)
+
 export default router
