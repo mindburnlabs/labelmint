@@ -17,6 +17,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@labelmint/shared": "workspace:*",
     "@prisma/client": "^5.22.0",
     "@supabase/supabase-js": "^2.76.1",
     "@ton/core": "^0.62.0",

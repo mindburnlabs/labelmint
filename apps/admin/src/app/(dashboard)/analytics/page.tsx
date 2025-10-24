@@ -12,8 +12,8 @@ import { LineChart } from '@/components/charts/LineChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { PieChart } from '@/components/charts/PieChart';
 import { KPICard } from '@/components/charts/KPICard';
-import { Button } from '@/components/ui/Button';
-import { formatCurrency } from '@/lib/utils';
+import { Button } from '@labelmint/ui/components/Button';
+import { formatCurrency } from '@labelmint/utils';
 import {
   UsersIcon,
   FolderIcon,

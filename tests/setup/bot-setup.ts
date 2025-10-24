@@ -1,245 +1,131 @@
-import { setup } from './unit-setup'
+// Bot test setup
+import { vi } from 'vitest'
+import { setupDatabase, truncateTestTables } from './database-setup'
 
-// Telegram Bot-specific test setup
-export function setupBot() {
-  const { cleanup: unitCleanup } = setup()
-
-  // Setup bot-specific environment variables
-  process.env.BOT_TOKEN = 'test-bot-token'
-  process.env.BACKEND_URL = 'http://localhost:3001'
-  process.env.PAYMENT_SERVICE_URL = 'http://localhost:3002'
-  process.env.NODE_ENV = 'test'
-
-  // Mock Telegram Bot API
-  const mockTelegramApi = {
-    getMe: vi.fn().mockResolvedValue({
-      id: 123456789,
-      is_bot: true,
-      first_name: 'LabelMint Bot',
-      username: 'labelmint_bot',
-      can_join_groups: true,
-      can_read_all_group_messages: false,
-      supports_inline_queries: false,
-    }),
-    sendMessage: vi.fn().mockResolvedValue({
-      message_id: 12345,
-      from: {
-        id: 123456789,
-        is_bot: true,
-        first_name: 'LabelMint Bot',
-        username: 'labelmint_bot',
-      },
-      chat: {
-        id: 987654321,
-        first_name: 'Test User',
-        username: 'testuser',
-        type: 'private',
-      },
-      date: Date.now(),
-      text: 'Test message',
-    }),
-    sendPhoto: vi.fn().mockResolvedValue({
-      message_id: 12346,
-      photo: [
-        {
-          file_id: 'photo_file_id_123',
-          file_unique_id: 'photo_unique_123',
-          file_size: 1024,
-          width: 800,
-          height: 600,
-        },
-      ],
-    }),
-    sendChatAction: vi.fn().mockResolvedValue(true),
-    answerCallbackQuery: vi.fn().mockResolvedValue(true),
-    editMessageText: vi.fn().mockResolvedValue({
-      message_id: 12345,
-      text: 'Edited message',
-      date: Date.now(),
-    }),
-    editMessageReplyMarkup: vi.fn().mockResolvedValue({
-      message_id: 12345,
-      date: Date.now(),
-    }),
-  }
-
-  // Extend test utilities with bot-specific helpers
-  global.testUtils = {
-    ...global.testUtils,
-
-    // Bot-specific helpers
-    createMockUpdate: (overrides: any = {}) => ({
-      update_id: 123456789,
-      message: {
-        message_id: 12345,
-        from: {
-          id: 987654321,
-          is_bot: false,
-          first_name: 'Test User',
-          last_name: 'User',
-          username: 'testuser',
-          language_code: 'en',
-        },
-        chat: {
-          id: 987654321,
-          first_name: 'Test User',
-          last_name: 'User',
-          username: 'testuser',
-          type: 'private',
-        },
-        date: Date.now(),
-        text: '/start',
-      },
-      ...overrides,
-    }),
-
-    createMockCallbackQuery: (overrides: any = {}) => ({
-      id: 'callback_query_123',
-      from: {
-        id: 987654321,
-        is_bot: false,
-        first_name: 'Test User',
-        username: 'testuser',
-        language_code: 'en',
-      },
-      message: {
-        message_id: 12345,
-        from: {
-          id: 123456789,
-          is_bot: true,
-          first_name: 'LabelMint Bot',
-          username: 'labelmint_bot',
-        },
-        date: Date.now(),
-        chat: {
-          id: 987654321,
-          first_name: 'Test User',
-          username: 'testuser',
-          type: 'private',
-        },
-        text: 'Select an option:',
-      },
-      chat_instance: '-123456789',
-      data: 'button_clicked',
-      ...overrides,
-    }),
-
-    createMockInlineQuery: (overrides: any = {}) => ({
-      id: 'inline_query_123',
-      from: {
-        id: 987654321,
-        is_bot: false,
-        first_name: 'Test User',
-        username: 'testuser',
-        language_code: 'en',
-      },
-      query: 'test query',
-      offset: '',
-      ...overrides,
-    }),
-
-    createMockUser: (overrides: any = {}) => ({
-      id: 987654321,
-      is_bot: false,
-      first_name: 'Test',
-      last_name: 'User',
-      username: 'testuser',
-      language_code: 'en',
-      is_premium: false,
-      ...overrides,
-    }),
-
-    createMockChat: (overrides: any = {}) => ({
-      id: 987654321,
-      first_name: 'Test',
-      last_name: 'User',
-      username: 'testuser',
-      type: 'private',
-      ...overrides,
-    }),
-
-    // Bot command helpers
-    createMockBotCommand: (command: string, description: string) => ({
-      command,
-      description,
-    }),
-
-    // Message helpers
-    createMockTextMessage: (text: string, overrides: any = {}) => ({
-      message_id: Math.floor(Math.random() * 100000),
-      from: global.testUtils.createMockUser(),
-      chat: global.testUtils.createMockChat(),
-      date: Math.floor(Date.now() / 1000),
-      text,
-      ...overrides,
-    }),
-
-    createMockPhotoMessage: (caption: string = '', overrides: any = {}) => ({
-      message_id: Math.floor(Math.random() * 100000),
-      from: global.testUtils.createMockUser(),
-      chat: global.testUtils.createMockChat(),
-      date: Math.floor(Date.now() / 1000),
-      photo: [
-        {
-          file_id: 'photo_file_id_' + Math.random().toString(36),
-          file_unique_id: 'photo_unique_' + Math.random().toString(36),
-          file_size: 1024,
-          width: 800,
-          height: 600,
-        },
-      ],
-      caption,
-      ...overrides,
-    }),
-
-    // Keyboard helpers
-    createMockInlineKeyboard: (buttons: Array<{text: string; callback_data: string}[]>) => ({
-      inline_keyboard: buttons,
-    }),
-
-    createMockReplyKeyboard: (buttons: string[][]) => ({
-      keyboard: buttons.map(row => row.map(text => ({ text }))),
-      resize_keyboard: true,
-      one_time_keyboard: false,
-    }),
-
-    // Task-related helpers
-    createMockTaskForBot: (overrides: any = {}) => ({
-      id: 'task_bot_123',
-      type: 'image_classification',
-      imageUrl: 'https://example.com/image.jpg',
-      instructions: 'Classify the image',
-      labels: ['cat', 'dog', 'bird'],
-      paymentPerLabel: 0.01,
-      timeLimit: 300, // 5 minutes
-      ...overrides,
-    }),
-  }
-
-  // Mock telegraf or your preferred bot framework
-  global.bot = {
-    start: vi.fn(),
-    stop: vi.fn(),
-    hear: vi.fn(),
-    command: vi.fn(),
-    action: vi.fn(),
-    on: vi.fn(),
-    use: vi.fn(),
-    launch: vi.fn(),
-  }
-
-  // Setup global telegram API mock
-  global.telegramApi = mockTelegramApi
-
-  return {
-    cleanup: () => {
-      unitCleanup()
-      vi.clearAllMocks()
-    },
+// Mock Telegraf more thoroughly
+const mockContext = {
+  from: { id: 12345, username: 'testuser' },
+  chat: { id: 12345 },
+  message: { text: '/start', message_id: 1 },
+  reply: vi.fn(),
+  replyWith: vi.fn(),
+  editMessageText: vi.fn(),
+  deleteMessage: vi.fn(),
+  sendMessage: vi.fn(),
+  telegram: {
+    sendMessage: vi.fn(),
+    editMessageText: vi.fn(),
+    deleteMessage: vi.fn()
   }
 }
 
-// Auto-setup for bot tests
-const { cleanup } = setupBot()
+vi.mock('telegraf', () => ({
+  Telegraf: vi.fn().mockImplementation(() => ({
+    command: vi.fn((command: string, handler: Function) => {
+      // Store command handlers for testing
+      ;(global as any).mockBotCommands = (global as any).mockBotCommands || new Map()
+      ;(global as any).mockBotCommands.set(command, handler)
+    }),
+    on: vi.fn((event: string, handler: Function) => {
+      // Store event handlers for testing
+      ;(global as any).mockBotHandlers = (global as any).mockBotHandlers || new Map()
+      ;(global as any).mockBotHandlers.set(event, handler)
+    }),
+    launch: vi.fn(() => Promise.resolve()),
+    stop: vi.fn(() => Promise.resolve()),
+    // Expose mock methods for testing
+    simulateCommand: async (command: string, ctx = mockContext) => {
+      const handlers = (global as any).mockBotCommands
+      if (handlers?.has(command)) {
+        const handler = handlers.get(command)
+        await handler(ctx)
+      }
+    },
+    simulateEvent: async (event: string, ctx = mockContext) => {
+      const handlers = (global as any).mockBotHandlers
+      if (handlers?.has(event)) {
+        const handler = handlers.get(event)
+        await handler(ctx)
+      }
+    }
+  })),
+  Context: vi.fn(() => mockContext),
+  Markup: {
+    inlineKeyboard: vi.fn((buttons: any[][]) => ({
+      reply_markup: { inline_keyboard: buttons }
+    })),
+    keyboard: vi.fn((buttons: any[][]) => ({
+      reply_markup: { keyboard: buttons, resize_keyboard: true }
+    })),
+    removeKeyboard: vi.fn(() => ({
+      reply_markup: { remove_keyboard: true }
+    }))
+  }
+}))
 
-export { cleanup }
+// Mock TON blockchain interactions
+vi.mock('@ton/ton', () => ({
+  TonClient: vi.fn().mockImplementation(() => ({
+    openContract: vi.fn(() => ({
+      send: vi.fn(() => Promise.resolve({
+        transactions: [{
+          address: 'EQD___vdB-35R-5aC_5Pq0rh0L2A_sO8U_9nZb7QJ1k0QfE',
+          amount: '10000000'
+        }]
+      })),
+      getBalance: vi.fn(() => Promise.resolve('5000000000')), // 5 TON
+      getTransactions: vi.fn(() => Promise.resolve([]))
+    }))
+  })),
+  Address: {
+    parse: vi.fn((addr: string) => ({
+      toString: () => addr,
+      toRawString: () => addr
+    })),
+    parseFriendly: vi.fn(() => ({
+      address: {
+        toString: () => 'EQD___vdB-35R-5aC_5Pq0rh0L2A_sO8U_9nZb7QJ1k0QfE'
+      }
+    }))
+  },
+  fromNano: vi.fn((nano: string) => (parseInt(nano) / 1000000000).toString()),
+  toNano: vi.fn((ton: string) => (parseFloat(ton) * 1000000000).toString()),
+  beginCell: vi.fn(() => ({
+    storeUint: vi.fn().mockReturnThis(),
+    storeAddress: vi.fn().mockReturnThis(),
+    storeCoins: vi.fn().mockReturnThis(),
+    endCell: vi.fn(() => ({
+      toBoc: vi.fn(() => Buffer.from('test'))
+    }))
+  })),
+  TonContract: vi.fn()
+}))
+
+// Set environment variables
+process.env.NODE_ENV = 'test'
+process.env.TELEGRAM_BOT_TOKEN = 'test_bot_token'
+process.env.PLATFORM_MNEMONIC = 'test cancel ride gift float embark used oval armor top valve clutch exist glare fresh cage label about express style reflect chick flag memo'
+process.env.TONCENTER_TESTNET_API_KEY = 'test_api_key'
+
+// Setup database
+beforeAll(async () => {
+  await setupDatabase()
+})
+
+// Clean database before each test
+beforeEach(async () => {
+  await truncateTestTables()
+  vi.clearAllMocks()
+
+  // Reset mock bot state
+  ;(global as any).mockBotCommands = new Map()
+  ;(global as any).mockBotHandlers = new Map()
+})
+
+afterAll(async () => {
+  const { cleanupDatabase } = await import('./database-setup')
+  await cleanupDatabase()
+})
+
+// Export mock helpers for tests
+export { mockContext }

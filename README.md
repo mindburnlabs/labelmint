@@ -60,7 +60,7 @@ labelmint/
 │   └── clients/           # API clients
 └── infrastructure/         # DevOps and deployment
     ├── docker/            # Docker configurations
-    ├── infrastructure/k8s/               # Kubernetes manifests
+    ├── infrastructure/infrastructure/k8s/               # Kubernetes manifests
     └── monitoring/        # Observability stack
 ```
 
@@ -85,8 +85,8 @@ cp .env.example .env
 # Install dependencies
 pnpm install
 
-# Start all services
-pnpm run dev
+# Start all services using unified deployment script
+./scripts/deploy-unified.sh deploy development
 ```
 
 ### Development Setup
@@ -101,8 +101,11 @@ pnpm run services:up
 # Start frontend applications
 pnpm run apps:up
 
-# Start everything at once
-./scripts/dev/start-all.sh
+# Or use the unified deployment script for all environments
+./scripts/deploy-unified.sh deploy development      # Development
+./scripts/deploy-unified.sh deploy staging         # Staging
+./scripts/deploy-unified.sh deploy production      # Production
+./scripts/deploy-unified.sh deploy debug           # Development with debugging tools
 ```
 
 ### Access Points
@@ -126,6 +129,55 @@ pnpm run apps:up
 - [🚀 Deployment Guide](docs/deployment/production.md)
 - [👥 Contributing Guidelines](docs/development/contributing.md)
 - [❓ Troubleshooting](docs/development/troubleshooting.md)
+
+## 🚀 Deployment
+
+### Unified Deployment Script
+
+LabelMint uses a unified deployment script that handles all environments and includes built-in health checks, backup capabilities, and rollback support.
+
+```bash
+# Basic deployment commands
+./scripts/deploy-unified.sh deploy development      # Deploy to development
+./scripts/deploy-unified.sh deploy staging         # Deploy to staging
+./scripts/deploy-unified.sh deploy production      # Deploy to production
+./scripts/deploy-unified.sh deploy debug           # Development with debugging
+
+# Advanced deployment options
+./scripts/deploy-unified.sh deploy production --force          # Force deploy without confirmation
+./scripts/deploy-unified.sh deploy production --skip-backup    # Skip backup creation
+./scripts/deploy-unified.sh deploy production --dry-run        # Preview deployment actions
+
+# Service management
+./scripts/deploy-unified.sh status                    # Show deployment status
+./scripts/deploy-unified.sh logs [service]           # Show service logs
+./scripts/deploy-unified.sh stop                      # Stop all services
+./scripts/deploy-unified.sh restart [service]        # Restart service(s)
+./scripts/deploy-unified.sh health                    # Run health checks
+
+# Backup and rollback
+./scripts/deploy-unified.sh backup                    # Create manual backup
+./scripts/deploy-unified.sh rollback [backup_name]   # Rollback to backup
+./scripts/deploy-unified.sh help                      # Show all options
+```
+
+### Environment Configuration
+
+| Environment | Compose File | Port Range | Debug Tools |
+|-------------|--------------|------------|-------------|
+| Development | docker-compose.yml | 3000-3010 | No |
+| Staging | docker-compose.staging.yml | 3100-3110 | No |
+| Production | docker-compose.prod.yml | 3000-3010 | No |
+| Debug | docker-compose.unified.yml | 3000-3110 | Yes |
+
+### Health Checks & Monitoring
+
+All deployments include automated health checks:
+- Service health monitoring with configurable timeouts
+- Database connectivity verification
+- API endpoint testing for production/staging
+- Automatic rollback on failure
+- Comprehensive logging and error reporting
 
 ## 🛠️ Development Commands
 

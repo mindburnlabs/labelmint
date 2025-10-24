@@ -12,8 +12,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { usersApi } from '@/lib/api';
 import { User, UserFilters } from '@/types';
-import { Button } from '@/components/ui/Button';
-import { formatRelativeTime, formatCurrency } from '@/lib/utils';
+import { Button } from '@labelmint/ui/components/Button';
+import { formatRelativeTime, formatCurrency, debounce } from '@labelmint/utils';
 import { toast } from 'sonner';
 
 export default function UsersPage() {
@@ -358,13 +358,3 @@ export default function UsersPage() {
   );
 }
 
-function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}

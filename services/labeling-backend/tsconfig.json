@@ -1,18 +1,9 @@
 {
-  "extends": "../../config/shared/tsconfig.service.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@labelmint/shared/*": ["../../packages/shared/*"],
-      "@labelmint/types": ["../../packages/shared/types"],
-      "@labelmint/utils": ["../../packages/shared/utils"],
-      "@labelmint/validation": ["../../packages/shared/validation"],
-      "@labelmint/database": ["../../packages/shared/database"],
-      "@labelmint/auth": ["../../packages/shared/auth"],
-      "@labelmint/config": ["../../packages/shared/config"]
-    }
-  },
+  "extends": [
+    "../../config/shared/tsconfig.service.json",
+    "../../config/shared/tsconfig.paths.json"
+  ],
+  "compilerOptions": {},
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
-import { Button } from '@/components/ui/Button';
+import { Button } from '@labelmint/ui/components/Button';
 import {
   BellIcon,
   ShieldCheckIcon,
@@ -35,7 +35,7 @@ export default function SettingsPage() {
     { id: 'profile', name: 'Profile', icon: UserIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'security', name: 'Security', icon: ShieldCheckIcon },
-    { id: 'api', name: API Settings', icon: KeyIcon },
+    { id: 'api', name: 'API Settings', icon: KeyIcon },
     { id: 'system', name: 'System', icon: CogIcon },
   ];
 

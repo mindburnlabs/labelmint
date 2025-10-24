@@ -8,7 +8,7 @@ import { authClient } from '@/lib/auth-client';
 import { apiClient } from '@/lib/api-client';
 import { useDashboardUpdates } from '@/hooks/use-websocket';
 import { StatsCardSkeleton, ProjectCardSkeleton } from '@/components/ui/loading-skeleton';
-import { formatCurrency, formatDate, formatRelativeTime, calculatePercentage, statusColors } from '@/lib/utils';
+import { formatCurrency, formatDate, formatRelativeTime, calculatePercentage, statusColors } from '@labelmint/utils';
 import {
   PlusCircle,
   FileText,

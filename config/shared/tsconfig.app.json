@@ -13,23 +13,7 @@
       {
         "name": "next"
       }
-    ],
-    "paths": {
-      "@/*": ["./src/*"],
-      "@/components/*": ["./src/components/*"],
-      "@/pages/*": ["./src/pages/*"],
-      "@/styles/*": ["./src/styles/*"],
-      "@/lib/*": ["./src/lib/*"],
-      "@/hooks/*": ["./src/hooks/*"],
-      "@/types/*": ["./src/types/*"],
-      "@/utils/*": ["./src/utils/*"],
-      "@/assets/*": ["./src/assets/*"],
-      "@/config/*": ["./src/config/*"],
-      "@/api/*": ["./src/api/*"],
-      "@/store/*": ["./src/store/*"],
-      "@/contexts/*": ["./src/contexts/*"],
-      "@/constants/*": ["./src/constants/*"]
-    }
+    ]
   },
   "include": [
     "next-env.d.ts",

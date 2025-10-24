@@ -94,7 +94,7 @@ curl http://localhost/api/health
 #### Kubernetes Scaling
 
 ```yaml
-# infrastructure/k8s/backend-deployment.yaml
+# infrastructure/infrastructure/k8s/backend-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:

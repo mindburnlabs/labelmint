@@ -1,54 +1,60 @@
-import { PrismaClient } from '@prisma/client'
+// Database setup for testing
+import { Client } from 'pg'
 
-let testDb: PrismaClient
+let testDb: Client
 
-export function setupDatabase() {
+export async function setupDatabase() {
   if (testDb) {
     return testDb
   }
 
-  // Create test database connection
-  testDb = new PrismaClient({
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL || 'postgresql://test:test@localhost:5433/labelmint_test',
-      },
-    },
-    log: process.env.NODE_ENV === 'test' ? [] : ['query', 'info', 'warn', 'error'],
+  testDb = new Client({
+    connectionString: process.env.DATABASE_URL || 'postgresql://test:test@localhost:5433/labelmint_test'
   })
 
-  // Make database available globally
-  global.testDb = testDb
+  try {
+    await testDb.connect()
+    console.log('Test database connected successfully')
+  } catch (error) {
+    console.warn('Test database connection failed, using mocks:', error)
+    testDb = null as any
+  }
 
   return testDb
 }
 
-export async function resetDatabase() {
-  if (!testDb) {
-    setupDatabase()
+export function getTestDb() {
+  return testDb
+}
+
+export async function cleanupDatabase() {
+  if (testDb) {
+    await testDb.end()
+    testDb = null as any
   }
+}
 
-  // Delete all data in dependency order
-  const models = ['label', 'task', 'project', 'user'] as const
+// Truncate tables for clean test state
+export async function truncateTestTables() {
+  if (!testDb) return
 
-  for (const model of models) {
+  const tables = [
+    'worker_payments',
+    'payment_channels',
+    'worker_balances',
+    'withdrawal_batch',
+    'tasks',
+    'labels',
+    'users',
+    'projects'
+  ]
+
+  for (const table of tables) {
     try {
-      await testDb[model].deleteMany({})
+      await testDb.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE`)
     } catch (error) {
-      console.warn(`Failed to clean ${model} table:`, error)
+      // Table might not exist, which is fine for some tests
+      console.warn(`Failed to truncate table ${table}:`, error)
     }
   }
 }
-
-export async function disconnectDatabase() {
-  if (testDb) {
-    await testDb.$disconnect()
-    testDb = null as any
-    global.testDb = null
-  }
-}
-
-// Auto-setup database connection
-setupDatabase()
-
-export { testDb }

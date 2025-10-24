@@ -56,18 +56,7 @@ metrics_generator:
 overrides:
   per_user_override_config: /tmp/overrides.yaml
 
-storage:
-  trace:
-    backend: local
-    local:
-      path: /tmp/tempo/traces
-    wal:
-      path: /tmp/tempo/wal
-    pool:
-      max_workers: 8
-      queue_depth: 10000
-
- querier:
+querier:
   frontend_worker:
     frontend_address: 0.0.0.0:9096
 

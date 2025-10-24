@@ -11,8 +11,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { disputesApi } from '@/lib/api';
 import { Dispute, DisputeFilters } from '@/types';
-import { Button } from '@/components/ui/Button';
-import { formatRelativeTime } from '@/lib/utils';
+import { Button } from '@labelmint/ui/components/Button';
+import { formatRelativeTime } from '@labelmint/utils';
 import { toast } from 'sonner';
 
 export default function DisputesPage() {

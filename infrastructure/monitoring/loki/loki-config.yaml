@@ -88,11 +88,6 @@ ingester_client:
 memberlist:
   join_members:
     - localhost:7946
-  dead_node_reclaim_time: 30s
-  left_node_timeout: 30s
-  gossip_interval: 2s
-  push_pull_interval: 30s
-  enable_node_prometheus: true
 
 compactor:
   working_directory: /loki/compactor
@@ -102,12 +97,6 @@ compactor:
   delete_request_cancel_period: 24h
   delete_request_store: s3
 
-limits_config:
-  per_tenant_override_config: "/loki/overrides.yaml"
-
-wal:
-  enabled: true
-  dir: /loki/wal
 
 frontend_worker:
   frontend_address: 127.0.0.1:9095

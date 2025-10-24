@@ -1,164 +1,86 @@
-import { setup } from './unit-setup'
-import { resetDatabase } from './database-setup'
+// Backend test setup
+import { vi } from 'vitest'
+import { setupDatabase, truncateTestTables } from './database-setup'
 
-// Backend-specific test setup
-export function setupBackend() {
-  const { cleanup: unitCleanup } = setup()
-
-  // Setup process environment for backend tests
-  process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@localhost:5433/labelmint_test'
-  process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380/1'
-  process.env.JWT_SECRET = 'test-jwt-secret'
-  process.env.TON_RPC_ENDPOINT = 'https://testnet.toncenter.com/api/v2/jsonRPC'
-  process.env.USDT_CONTRACT_ADDRESS = 'test-address'
-  process.env.NODE_ENV = 'test'
-
-  // Extend test utilities with backend-specific helpers
-  global.testUtils = {
-    ...global.testUtils,
-
-    // Database helpers
-    createTestTaskInDb: async (taskData: any) => {
-      return global.testDb.task.create({
-        data: {
-          ...global.testUtils.createMockTask('1'),
-          ...taskData,
-        },
-      })
-    },
-
-    createTestUserInDb: async (userData: any = {}) => {
-      return global.testDb.user.create({
-        data: {
-          ...global.testUtils.createMockUser(),
-          ...userData,
-        },
-      })
-    },
-
-    createTestProjectInDb: async (projectData: any = {}) => {
-      return global.testDb.project.create({
-        data: {
-          ...global.testUtils.createMockProject(),
-          ...projectData,
-        },
-      })
-    },
-
-    // Service mocking helpers
-    mockAuthService: () => ({
-      generateToken: vi.fn().mockReturnValue('test-jwt-token'),
-      verifyToken: vi.fn().mockReturnValue({
-        userId: 'user_test_123',
-        email: 'test@example.com',
-        role: 'annotator',
-      }),
-      hashPassword: vi.fn().mockReturnValue('hashed-password'),
-      comparePassword: vi.fn().mockReturnValue(true),
-    }),
-
-    mockPaymentService: () => ({
-      createPayment: vi.fn().mockResolvedValue({
-        id: 'payment_123',
-        amount: 100,
-        currency: 'USDT',
-        status: 'pending',
-        createdAt: new Date(),
-      }),
-      processPayment: vi.fn().mockResolvedValue({
-        id: 'payment_123',
-        status: 'completed',
-        transactionHash: '0x123...abc',
-        completedAt: new Date(),
-      }),
-      getUserBalance: vi.fn().mockResolvedValue({
-        usdtBalance: 1000,
-        tonBalance: 5.5,
-      }),
-    }),
-
-    mockTONWalletService: () => ({
-      createWallet: vi.fn().mockResolvedValue({
-        address: 'EQDemoAddress123456789',
-        publicKey: 'public_key_demo',
-        mnemonic: ['word1', 'word2', 'word3', 'word4', 'word5', 'word6'],
-      }),
-      getBalance: vi.fn().mockResolvedValue({
-        tonBalance: '5.5',
-        usdtBalance: '1000',
-      }),
-      sendTransaction: vi.fn().mockResolvedValue({
-        hash: 'transaction_hash_123',
-        lt: 1234567890,
-        success: true,
-      }),
-      validateAddress: vi.fn().mockReturnValue(true),
-    }),
-
-    mockRedisService: () => ({
-      get: vi.fn(),
-      set: vi.fn().mockResolvedValue('OK'),
-      del: vi.fn(),
-      exists: vi.fn(),
-      incr: vi.fn(),
-      expire: vi.fn(),
-      flushall: vi.fn(),
-    }),
-
-    // HTTP mocking helpers
-    mockApiResponse: (data: any, status: number = 200) => ({
-      data,
-      status,
-      statusText: 'OK',
-      headers: {},
-      config: {},
-    }),
-
-    mockApiError: (message: string, status: number = 500) => ({
-      message,
-      status,
-      statusText: 'Internal Server Error',
-      headers: {},
-      config: {},
-    }),
-
-    // Test data helpers
-    createTestRequest: (overrides: any = {}) => ({
-      method: 'GET',
-      url: '/test',
-      headers: {
-        'content-type': 'application/json',
-        'authorization': 'Bearer test-token',
-      },
-      body: null,
-      ...overrides,
-    }),
-
-    createTestResponse: () => ({
-      status: 200,
-      json: vi.fn(),
-      send: vi.fn(),
-      status: vi.fn().mockReturnThis(),
-    }),
+// Mock Telegram Bot API
+vi.mock('telegraf', () => ({
+  Telegraf: vi.fn().mockImplementation(() => ({
+    command: vi.fn(),
+    on: vi.fn(),
+    launch: vi.fn(() => Promise.resolve()),
+    stop: vi.fn(() => Promise.resolve())
+  })),
+  Markup: {
+    inlineKeyboard: vi.fn(() => ({ reply_markup: { inline_keyboard: [] } })),
+    keyboard: vi.fn(() => ({ reply_markup: { keyboard: [] } }))
   }
+}))
 
-  // Setup global service mocks
-  global.authService = global.testUtils.mockAuthService()
-  global.paymentService = global.testUtils.mockPaymentService()
-  global.tonWalletService = global.testUtils.mockTONWalletService()
-  global.redisService = global.testUtils.mockRedisService()
+// Mock TON (The Open Network)
+vi.mock('@ton/ton', () => ({
+  TonClient: vi.fn().mockImplementation(() => ({
+    openContract: vi.fn(() => ({
+      send: vi.fn(() => Promise.resolve({ transactions: [] })),
+      getBalance: vi.fn(() => Promise.resolve('1000000000')),
+      getTransactions: vi.fn(() => Promise.resolve([]))
+    }))
+  })),
+  Address: {
+    parse: vi.fn(() => ({ toString: () => 'EQD___vdB-35R-5aC_5Pq0rh0L2A_sO8U_9nZb7QJ1k0QfE' }))
+  },
+  fromNano: vi.fn(() => '1.0'),
+  toNano: vi.fn(() => '1000000000')
+}))
 
-  return {
-    cleanup: async () => {
-      // Cleanup backend tests
-      await resetDatabase()
-      unitCleanup()
-      vi.clearAllMocks()
-    },
-  }
-}
+// Mock payment processing
+vi.mock('@labelmint/payment-backend', () => ({
+  PaymentHandler: vi.fn().mockImplementation(() => ({
+    calculateTaskPayment: vi.fn(() => Promise.resolve({
+      amount: 0.02,
+      baseRate: 0.02,
+      multiplier: 1,
+      qualityBonus: 0
+    })),
+    payWorker: vi.fn(() => Promise.resolve({ success: true, amount: 0.02 })),
+    createPaymentChannel: vi.fn(() => Promise.resolve({
+      id: 'test-channel',
+      capacity: 10,
+      spent: 0,
+      isActive: true
+    })),
+    getWorkerBalance: vi.fn(() => Promise.resolve({
+      balance: 0,
+      channelBalance: 0
+    })),
+    withdrawFunds: vi.fn(() => Promise.resolve({
+      success: true,
+      amount: 10,
+      fee: 0.1,
+      batchId: 'test-batch'
+    }))
+  }))
+}))
 
-// Auto-setup for backend tests
-const { cleanup } = setupBackend()
+// Set up environment variables for backend tests
+process.env.NODE_ENV = 'test'
+process.env.DATABASE_URL = 'postgresql://test:test@localhost:5433/labelmint_test'
+process.env.REDIS_URL = 'redis://localhost:6380/1'
+process.env.TONCENTER_TESTNET_API_KEY = 'test_key'
+process.env.PLATFORM_MNEMONIC = 'test cancel ride gift float embark used oval armor top valve clutch exist glare fresh cage label about express style reflect chick flag memo'
 
-export { cleanup }
+// Setup database
+beforeAll(async () => {
+  await setupDatabase()
+})
+
+// Clean database before each test
+beforeEach(async () => {
+  await truncateTestTables()
+  vi.clearAllMocks()
+})
+
+// Cleanup after tests
+afterAll(async () => {
+  const { cleanupDatabase } = await import('./database-setup')
+  await cleanupDatabase()
+})

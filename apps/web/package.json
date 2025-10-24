@@ -10,10 +10,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@labelmint/ui": "workspace:*",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@labelmint/ui": "workspace:*",
     "@tanstack/react-table": "^8.10.7",
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",

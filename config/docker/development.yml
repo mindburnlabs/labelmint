@@ -1,0 +1,88 @@
+# Development Override for LabelMint Docker Compose
+# Extends docker-compose.unified.yml with development-specific configurations
+# Version: 3.8
+
+services:
+  # Development overrides for web application
+  web:
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_ENVIRONMENT: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3002"
+    command: npm run dev
+
+  # Development overrides for labeling backend
+  labeling-backend:
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      DEBUG: labelmint:*
+    volumes:
+      - ./services/labeling-backend:/app
+      - /app/node_modules
+    ports:
+      - "3101:3101"
+    command: npm run dev
+
+  # Development overrides for payment backend
+  payment-backend:
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+      DEBUG: labelmint:*
+    volumes:
+      - ./services/payment-backend:/app
+      - /app/node_modules
+    ports:
+      - "3103:3103"
+    command: npm run dev
+
+  # Development overrides for client bot
+  client-bot:
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./services/bots/client-bot:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Development overrides for worker bot
+  worker-bot:
+    environment:
+      NODE_ENV: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./services/bots/worker-bot:/app
+      - /app/node_modules
+    command: npm run dev
+
+  # Include debug tools in development
+  redis-commander:
+    profiles: []  # Remove profile restriction for development
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:${REDIS_PASSWORD}
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+
+  pgadmin:
+    profiles: []  # Remove profile restriction for development
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@labelmint.dev
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+
+# Development-specific volumes
+volumes:
+  web_node_modules:
+    driver: local
+  labeling_backend_node_modules:
+    driver: local
+  payment_backend_node_modules:
+    driver: local

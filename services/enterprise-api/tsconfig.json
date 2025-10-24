@@ -1,4 +1,8 @@
 {
+  "extends": [
+    "../../config/shared/tsconfig.base.json",
+    "../../config/shared/tsconfig.paths.json"
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -6,7 +10,6 @@
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
-    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -19,7 +22,6 @@
     "emitDecoratorMetadata": true,
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"],
       "@/controllers/*": ["controllers/*"],
       "@/services/*": ["services/*"],
       "@/models/*": ["models/*"],

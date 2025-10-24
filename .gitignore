@@ -67,6 +67,9 @@ google-credentials.json
 *.bak
 *.old
 *.orig
+backup*/
+archive*/
+*.backup.*
 
 # Logs that might contain sensitive information
 *.log
@@ -97,6 +100,8 @@ audit.log
 .cache/
 .parcel-cache/
 .eslintcache
+.turbo/
+.vite/
 
 # Testing
 coverage/
@@ -171,3 +176,11 @@ temp/
 
 # AI Assistant files
 .claude/
+
+# Migration and temporary documentation
+*MIGRATION*
+*CONSOLIDATION*
+*.path-backup.*
+
+# Build tool caches
+*.tsbuildinfo

@@ -1,0 +1,148 @@
+# Testing Override for LabelMint Docker Compose
+# Extends docker-compose.unified.yml with testing-specific configurations
+# Version: 3.8
+
+services:
+  # Testing database configuration
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labelmint_test}
+      POSTGRES_USER: ${POSTGRES_USER:-labelmint_test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-test_password}
+    ports:
+      - "5433:5432"  # Different port for testing
+    tmpfs:
+      - /var/lib/postgresql/data  # Use in-memory storage for tests
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+
+  # Testing Redis configuration
+  redis:
+    command: >
+      redis-server
+      --appendonly no
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    ports:
+      - "6380:6379"  # Different port for testing
+    tmpfs:
+      - /data  # Use in-memory storage for tests
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Test-specific MinIO configuration
+  minio:
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-testaccesskey}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-testsecretkey}
+    ports:
+      - "9001:9000"
+      - "9002:9001"
+    tmpfs:
+      - /data  # Use in-memory storage for tests
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Testing service for running tests
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: labelmint-test-runner
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://${POSTGRES_USER:-labelmint_test}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-labelmint_test}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-testaccesskey}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-testsecretkey}
+      MINIO_ENDPOINT: minio:9000
+      JWT_SECRET: ${JWT_SECRET:-test_jwt_secret}
+      LOG_LEVEL: error  # Reduce log noise in tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./tests:/app/tests
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - test-results:/app/test-results
+    networks:
+      - labelmint-data
+      - labelmint-backend
+    command: npm test
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+
+  # E2E Test Service
+  e2e-test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    container_name: labelmint-e2e-test-runner
+    environment:
+      NODE_ENV: test
+      BASE_URL: http://web:3002
+      API_URL: http://api-gateway:3104
+      DATABASE_URL: postgresql://${POSTGRES_USER:-labelmint_test}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-labelmint_test}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      - web
+      - api-gateway
+      - postgres
+      - redis
+    volumes:
+      - ./tests:/app/tests
+      - ./playwright.config.ts:/app/playwright.config.ts
+      - test-results:/app/test-results
+    networks:
+      - labelmint-frontend
+      - labelmint-backend
+    command: npm run test:e2e
+    profiles:
+      - e2e
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+
+# Remove production-only services in testing
+x-test-only-services: &test-only-services
+  prometheus: {}
+  grafana: {}
+  loki: {}
+  tempo: {}
+  alertmanager: {}
+  node-exporter: {}
+  nginx: {}
+  client-bot: {}
+  worker-bot: {}
+
+# Test-specific volumes
+volumes:
+  test-results:
+    driver: local

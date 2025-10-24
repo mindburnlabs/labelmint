@@ -11,8 +11,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { projectsApi } from '@/lib/api';
 import { Project, ProjectFilters } from '@/types';
-import { Button } from '@/components/ui/Button';
-import { formatRelativeTime, formatCurrency } from '@/lib/utils';
+import { Button } from '@labelmint/ui/components/Button';
+import { formatRelativeTime, formatCurrency } from '@labelmint/utils';
 import { toast } from 'sonner';
 
 export default function ProjectsPage() {

@@ -1,0 +1,175 @@
+# Testing Environment Override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.test.yml up
+
+version: '3.8'
+
+services:
+  # Minimal services for testing
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labelmint_test}
+      NODE_ENV: testing
+    ports:
+      - "5433:5432"  # Different port for testing
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  redis:
+    environment:
+      NODE_ENV: testing
+    ports:
+      - "6380:6379"  # Different port for testing
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+  redis-bots:
+    environment:
+      NODE_ENV: testing
+    ports:
+      - "6381:6379"  # Different port for testing
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+        reservations:
+          memory: 32M
+          cpus: '0.05'
+
+  minio:
+    environment:
+      NODE_ENV: testing
+    ports:
+      - "9001:9000"  # Different port for testing
+      - "9002:9001"  # Different console port for testing
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # Test-specific backend configurations
+  labeling-backend:
+    environment:
+      NODE_ENV: testing
+      LOG_LEVEL: error  # Minimal logging for tests
+      DATABASE_URL: postgresql://${POSTGRES_USER:-labelmint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-labelmint_test}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6380
+    ports:
+      - "3102:3101"  # Different port for testing
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    command: npm run test:server
+
+  payment-backend:
+    environment:
+      NODE_ENV: testing
+      LOG_LEVEL: error  # Minimal logging for tests
+      DATABASE_URL: postgresql://${POSTGRES_USER:-labelmint}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-labelmint_test}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6380
+    ports:
+      - "3104:3103"  # Different port for testing
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    command: npm run test:server
+
+  # Disable most services for testing
+  web:
+    profiles:
+      - disabled
+
+  api-gateway:
+    profiles:
+      - disabled
+
+  client-bot:
+    profiles:
+      - disabled
+
+  worker-bot:
+    profiles:
+      - disabled
+
+  nginx:
+    profiles:
+      - disabled
+
+  # Minimal monitoring for tests
+  prometheus:
+    environment:
+      NODE_ENV: testing
+    ports:
+      - "9091:9090"  # Different port for testing
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  grafana:
+    profiles:
+      - disabled  # Disable Grafana in tests
+
+  loki:
+    profiles:
+      - disabled  # Disable Loki in tests
+
+  tempo:
+    profiles:
+      - disabled  # Disable Tempo in tests
+
+  alertmanager:
+    profiles:
+      - disabled  # Disable AlertManager in tests
+
+  node-exporter:
+    profiles:
+      - disabled  # Disable Node Exporter in tests
+
+  redis-commander:
+    profiles:
+      - disabled  # Disable debug tools
+
+  pgadmin:
+    profiles:
+      - disabled  # Disable debug tools
