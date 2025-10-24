@@ -11,14 +11,14 @@
     "validate-configs": "node scripts/validate-configs.js",
     "check-deps": "node scripts/check-dependencies.js",
     "fix-deps": "node scripts/fix-dependencies.js",
-    "test:unit": "vitest run --config vitest.config.ts --config-env unit",
-    "test:integration": "vitest run --config vitest.config.ts --config-env integration",
-    "test:e2e": "vitest run --config vitest.config.ts --config-env e2e",
-    "test:performance": "vitest run --config vitest.config.ts --config-env performance",
-    "test:frontend": "vitest run --config vitest.config.ts --config-env frontend",
-    "test:backend": "vitest run --config vitest.config.ts --config-env backend",
-    "test:bot": "vitest run --config vitest.config.ts --config-env bot",
-    "test:watch": "vitest --config vitest.config.ts --config-env unit",
+    "test:unit": "vitest run --config vitest.config.ts --environment node",
+    "test:integration": "vitest run --config vitest.config.ts --environment node --test-timeout 60000",
+    "test:e2e": "vitest run --config vitest.config.ts --environment node --test-timeout 120000",
+    "test:performance": "vitest run --config vitest.config.ts --environment node --test-timeout 300000",
+    "test:frontend": "vitest run --config vitest.config.ts --environment jsdom",
+    "test:backend": "vitest run --config vitest.config.ts --environment node --test-timeout 60000",
+    "test:bot": "vitest run --config vitest.config.ts --environment node",
+    "test:watch": "vitest --config vitest.config.ts --environment node",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:run": "vitest run --reporter=verbose",
@@ -122,7 +122,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
     "pg": "^8.16.3",
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "jsdom": "^25.0.1"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
