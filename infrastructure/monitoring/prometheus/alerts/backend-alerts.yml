@@ -1,0 +1,220 @@
+groups:
+  - name: labelmintit-backend-alerts
+    rules:
+      # High Error Rate Alert
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+          runbook_url: "https://docs.labelmintit.com/runbooks/errors"
+
+      # Response Time Alert
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is {{ $value }}s (threshold: 0.5s)"
+          runbook_url: "https://docs.labelmintit.com/runbooks/performance"
+
+      # Database Connection Pool Usage
+      - alert: DatabaseConnectionPoolHigh
+        expr: (active_connections / max_connections) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+          team: backend
+        annotations:
+          summary: "Database connection pool usage is high"
+          description: "{{ $value | humanizePercentage }} of database connections are in use"
+          runbook_url: "https://docs.labelmintit.com/runbooks/database"
+
+      # Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "Memory usage is critically high"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.labelmintit.com/runbooks/memory"
+
+      # CPU Usage Alert
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "CPU usage is high"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.labelmintit.com/runbooks/cpu"
+
+      # Disk Space Alert
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.2
+        for: 10m
+        labels:
+          severity: critical
+          service: infrastructure
+          team: backend
+        annotations:
+          summary: "Low disk space detected"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+          runbook_url: "https://docs.labelmintit.com/runbooks/disk"
+
+      # Pod Restart Alert
+      - alert: PodRestartHigh
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kubernetes
+          team: backend
+        annotations:
+          summary: "Pod is restarting frequently"
+          description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes"
+          runbook_url: "https://docs.labelmintit.com/runbooks/pods"
+
+      # Unhealthy Service Alert
+      - alert: ServiceUnhealthy
+        expr: up{job="labelmintit-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "Service is down"
+          description: "Deligateit backend service is not responding"
+          runbook_url: "https://docs.labelmintit.com/runbooks/service"
+
+      # Database Query Duration Alert
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+          team: backend
+        annotations:
+          summary: "Slow database queries detected"
+          description: "95th percentile query duration is {{ $value }}s"
+          runbook_url: "https://docs.labelmintit.com/runbooks/database"
+
+      # Redis Memory Usage Alert
+      - alert: RedisHighMemoryUsage
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+          team: backend
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis is using {{ $value | humanizePercentage }} of available memory"
+          runbook_url: "https://docs.labelmintit.com/runbooks/redis"
+
+      # Cache Hit Rate Alert
+      - alert: LowCacheHitRate
+        expr: rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: redis
+          team: backend
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.labelmintit.com/runbooks/redis"
+
+      # JWT Token Expiry Alert
+      - alert: JWTTokenExpiryImminent
+        expr: (time() - jwt_issued_at_timestamp) > (jwt_expires_in - 300)
+        for: 1m
+        labels:
+          severity: info
+          service: auth
+          team: backend
+        annotations:
+          summary: "JWT tokens expiring soon"
+          description: "JWT tokens will expire in less than 5 minutes"
+
+      # Active Users Alert
+      - alert: UnusualUserActivity
+        expr: active_users_total > 1000
+        for: 5m
+        labels:
+          severity: info
+          service: auth
+          team: backend
+        annotations:
+          summary: "High user activity detected"
+          description: "{{ $value }} active users currently"
+          runbook_url: "https://docs.labelmintit.com/runbooks/scaling"
+
+      # API Rate Limit Exceeded
+      - alert: APIRateLimitExceeded
+        expr: rate(http_requests_total{status="429"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "API rate limit being exceeded"
+          description: "Rate limit exceeded {{ $value }} times per second"
+
+      # Database Deadlocks Alert
+      - alert: DatabaseDeadlocks
+        expr: increase(db_deadlocks_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+          team: backend
+        annotations:
+          summary: "Database deadlocks detected"
+          description: "{{ $value }} deadlocks in the last 5 minutes"
+          runbook_url: "https://docs.labelmintit.com/runbooks/database"
+
+      # SSL Certificate Expiry Alert
+      - alert: SSLCertificateExpiring
+        expr: ssl_certificate_expiry_seconds < 604800 # 7 days
+        for: 1h
+        labels:
+          severity: warning
+          service: infrastructure
+          team: backend
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "Certificate for {{ $labels.domain }} expires in {{ $value | humanizeDuration }}"
+
+      # Sentry Error Spike Alert
+      - alert: SentryErrorSpike
+        expr: increase(sentry_events_total[5m]) > 50
+        for: 2m
+        labels:
+          severity: critical
+          service: labelmintit-backend
+          team: backend
+        annotations:
+          summary: "Sudden spike in Sentry errors"
+          description: "{{ $value }} errors reported to Sentry in the last 5 minutes"
+          runbook_url: "https://docs.labelmintit.com/runbooks/errors"

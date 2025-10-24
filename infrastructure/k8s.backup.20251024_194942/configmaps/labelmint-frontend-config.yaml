@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: labelmint-frontend-config
+  namespace: labelmint
+  labels:
+    app: labelmint-frontend
+    component: frontend
+data:
+  VITE_API_URL: "https://api.labelmint.com"
+  VITE_WS_URL: "wss://api.labelmint.com"
+  VITE_MINIO_ENDPOINT: "https://s3.labelmint.com"
+  VITE_MINIO_BUCKET: "labelmint-assets"
+  VITE_SENTRY_DSN: "https://your-sentry-dsn@sentry.io/project-id"
+  VITE_COMMIT_SHA: "latest"
+  VITE_BRANCH: "main"
+  VITE_VERSION: "1.0.0"
+  VITE_ENVIRONMENT: "production"

@@ -1,0 +1,316 @@
+# Kubernetes Deployment for Web Application
+# ========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labelmint-web
+  namespace: labelmint
+  labels:
+    app: labelmint-web
+    version: v1
+    component: frontend
+    team: frontend
+spec:
+  # Strategy for zero-downtime deployment
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%  # Allow 25% of pods to be unavailable during update
+      maxSurge: 50%         # Allow 50% additional pods during update
+  replicas: 3
+  selector:
+    matchLabels:
+      app: labelmint-web
+  template:
+    metadata:
+      labels:
+        app: labelmint-web
+        version: v1
+        component: frontend
+        team: frontend
+      annotations:
+        # Enable Istio sidecar injection if using service mesh
+        sidecar.istio.io/inject: "true"
+        # Prometheus annotations for metrics scraping
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3002"
+        prometheus.io/path: "/api/metrics"
+        # Rolling update annotation
+        kubernetes.io/rolling-update: "true"
+    spec:
+      # Service account with least privileges
+      serviceAccountName: labelmint-web
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+      # Init containers to wait for dependencies
+      initContainers:
+        - name: wait-for-api
+          image: curlimages/curl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for backend API..."
+              until curl -f http://labelmint-backend:3001/health; do
+                echo "Backend not ready, waiting..."
+                sleep 5
+              done
+              echo "Backend is ready!"
+      containers:
+        - name: web
+          image: ghcr.io/mindburn-labs/labelmint/web:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3002
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3002"
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: labelmint-config
+                  key: API_URL
+            - name: NEXT_PUBLIC_WS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: labelmint-config
+                  key: WS_URL
+            - name: NEXT_PUBLIC_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: labelmint-config
+                  key: ENVIRONMENT
+            - name: NEXT_PUBLIC_COMMIT_SHA
+              valueFrom:
+                configMapKeyRef:
+                  name: labelmint-config
+                  key: COMMIT_SHA
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: labelmint-secrets
+                  key: JWT_SECRET
+          # Resource limits and requests
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          # Liveness and readiness probes
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /api/ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+            successThreshold: 1
+          # Volume mounts
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.next/cache
+          # Security context for container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 1001
+      # Volumes
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+      # Node selector and tolerations
+      nodeSelector:
+        kubernetes.io/os: linux
+        node-type: application
+      tolerations:
+        - key: "workload"
+          operator: "Equal"
+          value: "application"
+          effect: "NoSchedule"
+      # Affinity rules
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - labelmint-web
+                topologyKey: kubernetes.io/hostname
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - labelmint-backend
+              topologyKey: kubernetes.io/hostname
+      # Termination grace period
+      terminationGracePeriodSeconds: 60
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-web-hpa
+  namespace: labelmint
+  labels:
+    app: labelmint-web
+    component: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-web
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 5
+          periodSeconds: 60
+      selectPolicy: Max
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-web-pdb
+  namespace: labelmint
+  labels:
+    app: labelmint-web
+    component: frontend
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint-web
+---
+# Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: labelmint-web-netpol
+  namespace: labelmint
+  labels:
+    app: labelmint-web
+    component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint-web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3002
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: labelmint-backend
+        - podSelector:
+            matchLabels:
+              app: labelmint-payment
+      ports:
+        - protocol: TCP
+          port: 3001
+        - protocol: TCP
+          port: 3003
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

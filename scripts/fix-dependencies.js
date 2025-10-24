@@ -30,6 +30,7 @@ class DependencyFixer {
     await this.fixTailwindVersions();
     await this.fixBackendDependencies();
     await this.fixRemainingDependencies();
+    await this.fixPeerDependencies();
 
     this.printResults();
   }
@@ -308,7 +309,8 @@ class DependencyFixer {
       'http-proxy-middleware': '^3.0.0',
       'sharp': '^0.34.4',
       'ws': '^8.18.1',
-      '@types/ws': '^8.5.13'
+      '@types/ws': '^8.5.13',
+      'vitest': '^4.0.3'
     };
 
     for (const file of this.packageJsonFiles) {
@@ -332,6 +334,41 @@ class DependencyFixer {
           fs.writeFileSync(file, JSON.stringify(packageJson, null, 2) + '\n');
           this.fixesApplied++;
           console.log(`   ✓ Updated remaining dependencies in ${path.relative(this.rootDir, file)}`);
+        }
+      } catch (error) {
+        this.errors.push(`Failed to update ${file}: ${error.message}`);
+      }
+    }
+
+    console.log('');
+  }
+
+  async fixPeerDependencies() {
+    console.log('🔧 Fixing peer dependency inconsistencies...');
+
+    const standardVersions = {
+      'typescript': '>=5.0.0'
+    };
+
+    for (const file of this.packageJsonFiles) {
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(file, 'utf8'));
+        let modified = false;
+
+        // Update peerDependencies
+        if (packageJson.peerDependencies) {
+          Object.keys(standardVersions).forEach(dep => {
+            if (packageJson.peerDependencies[dep]) {
+              packageJson.peerDependencies[dep] = standardVersions[dep];
+              modified = true;
+            }
+          });
+        }
+
+        if (modified) {
+          fs.writeFileSync(file, JSON.stringify(packageJson, null, 2) + '\n');
+          this.fixesApplied++;
+          console.log(`   ✓ Updated peer dependencies in ${path.relative(this.rootDir, file)}`);
         }
       } catch (error) {
         this.errors.push(`Failed to update ${file}: ${error.message}`);

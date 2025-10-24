@@ -1,0 +1,163 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@labelmintit.com'
+  smtp_auth_username: 'alerts@labelmintit.com'
+  smtp_auth_password: 'your-smtp-password'
+  smtp_require_tls: true
+
+templates:
+  - 'templates/*.tmpl'
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+  routes:
+    # Critical alerts go to immediate notifications
+    - match:
+        severity: critical
+      group_wait: 5s
+      repeat_interval: 5m
+      receiver: 'critical-alerts'
+
+    # Warning alerts go to Slack
+    - match:
+        severity: warning
+      receiver: 'slack-alerts'
+      group_wait: 30s
+      repeat_interval: 1h
+
+    # Info alerts go to email
+    - match:
+        severity: info
+      receiver: 'info-alerts'
+      group_wait: 5m
+      repeat_interval: 24h
+
+receivers:
+  # Default receiver
+  - name: 'default'
+    email_configs:
+      - to: 'devops@labelmintit.com'
+        subject: '[DeligateIT Alert] {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+
+        {{ range .GroupLabels.SortedPairs }}
+        {{ .Name }}: {{ .Value }}
+        {{ end }}
+
+  # Critical alerts (immediate)
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'oncall@labelmintit.com,devops@labelmintit.com'
+        subject: '[CRITICAL] DeligateIT Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          CRITICAL ALERT - IMMEDIATE ACTION REQUIRED
+
+          {{ range .Alerts }}
+          🚨 {{ .Annotations.summary }}
+          📝 {{ .Annotations.description }}
+          🔗 Runbook: {{ .Annotations.runbook_url }}
+
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+          Cluster: {{ .GroupLabels.cluster }}
+          Service: {{ .GroupLabels.service }}
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#alerts-critical'
+        title: '🚨 CRITICAL ALERT'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # Warning alerts (Slack)
+  - name: 'slack-alerts'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#alerts'
+        title: '⚠️ Warning Alert'
+        color: 'warning'
+        text: |
+          {{ range .Alerts }}
+          *{{ .Annotations.summary }}*
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # Info alerts (email)
+  - name: 'info-alerts'
+    email_configs:
+      - to: 'info@labelmintit.com'
+        subject: '[INFO] DeligateIT: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+
+  # PagerDuty integration
+  - name: 'pagerduty'
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+
+  # Opsgenie integration
+  - name: 'opsgenie'
+    opsgenie_configs:
+      - api_key: 'YOUR_OPSGENIE_API_KEY'
+        description: '{{ .GroupLabels.alertname }}'
+        note: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        tags: '{{ .GroupLabels.cluster }},{{ .GroupLabels.service }}'
+
+inhibit_rules:
+  # Inhibit info alerts when critical alerts are firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'cluster', 'service']
+
+  # Inhibit warning alerts when critical alerts are firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
+
+# Time intervals for silencing
+time_intervals:
+  - name: 'business-hours'
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '17:00'
+        weekdays: ['monday:friday']
+        location: 'UTC'
+
+  - name: 'weekends'
+    time_intervals:
+      - weekdays: ['saturday:sunday']
+        location: 'UTC'
+
+  - name: 'holidays'
+    time_intervals:
+      - months: ['december']
+        days_of_month: ['25', '26']
+        years: [2024]
