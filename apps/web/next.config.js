@@ -3,17 +3,16 @@ const nextConfig = {
   experimental: {
     optimizeCss: true,
     optimizePackageImports: ['@labelmint/ui', 'framer-motion', 'recharts', '@headlessui/react'],
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  },
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
       },
     },
   },
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     domains: ['localhost', 'api.labelmint.com', 'cdn.labelmint.com', 'telegram.org', 'supabase.co', 'labelmint.mindburn.org'],
     formats: ['image/webp', 'image/avif'],
