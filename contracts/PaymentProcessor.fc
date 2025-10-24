@@ -1,0 +1,190 @@
+#include "imports/stdlib.fc";
+
+const int op::transfer = 0x5fcc3d14; ;; op code for internal transfer
+const int op::deposit = 0x4e4f5445; ;; op code for deposit
+const int op::withdraw = 0x5749544844; ;; op code for withdraw
+const int op::create_channel = 0x4348414e4e454c; ;; op code for create payment channel
+const int op::close_channel = 0x434c4f5345; ;; op code for close payment channel
+const int op::channel_payment = 0x4348414e4e454c504159; ;; op code for channel payment
+
+;; Storage variables
+;; storage#_ owner:MsgAddressInt balance:Coins channel_count:uint32 = Storage;
+(slice, (int, int, int)) load_data() inline {
+    slice ds = get_data().begin_parse();
+    return (
+        ds,
+        (ds~load_msg_addr(), ;; owner
+         ds~load_coins(), ;; total balance in nanoTON
+         ds~load_uint(32)) ;; channel count
+    );
+}
+
+;; Save storage
+() save_data(int owner, int balance, int channel_count) impure inline {
+    set_data(begin_cell()
+        .store_slice(parse_std_addr(owner))
+        .store_coins(balance)
+        .store_uint(channel_count, 32)
+        .end_cell());
+}
+
+;; Get contract owner
+(int) get_owner() method_id {
+    (_, (int owner, _, _)) = load_data();
+    return owner;
+}
+
+;; Get total balance
+(int) get_balance() method_id {
+    (_, (_, int balance, _)) = load_data();
+    return balance;
+}
+
+;; Get channel count
+(int) get_channel_count() method_id {
+    (_, (_, _, int channel_count)) = load_data();
+    return channel_count;
+}
+
+;; Receive message
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) { ;; ignore bounced messages
+        return ();
+    }
+
+    slice sender_address = cs~load_msg_addr();
+    (_, (int owner, int balance, int channel_count)) = load_data();
+    int op = in_msg_body~load_uint(32);
+
+    ;; Only owner can perform operations
+    throw_unless(401, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
+    ;; Handle different operations
+    if (op == op::deposit) {
+        ;; Deposit USDT equivalent
+        ;; Message body: op# deposit amount:Coins recipient:MsgAddressInt
+        int amount = in_msg_body~load_coins();
+        slice recipient = in_msg_body~load_msg_addr();
+
+        ;; For demo, we treat incoming TON as USDT equivalent
+        ;; In production, this would interact with USDT Jetton
+
+        ;; Update balance
+        balance += amount;
+        save_data(owner, balance, channel_count);
+
+        ;; Send confirmation to recipient
+        var msg = begin_cell()
+            .store_uint(0x18, 6) ;; bounce bit + message flag
+            .store_slice(recipient)
+            .store_coins(0) ;; no value
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) ;; default message header
+            .store_uint(0x4e4f54494659, 32) ;; notification op
+            .store_coins(amount)
+            .end_cell();
+
+        send_raw_message(msg, 64); ;; carry all remaining value
+
+    } elseif (op == op::withdraw) {
+        ;; Withdraw funds
+        ;; Message body: op# withdraw amount:Coins recipient:MsgAddressInt
+        int amount = in_msg_body~load_coins();
+        slice recipient = in_msg_body~load_msg_addr();
+
+        throw_unless(410, amount <= balance);
+
+        ;; Update balance
+        balance -= amount;
+        save_data(owner, balance, channel_count);
+
+        ;; Send withdrawal
+        var msg = begin_cell()
+            .store_uint(0x10, 6) ;; external outbound message
+            .store_slice(recipient)
+            .store_coins(amount)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) ;; default message header
+            .end_cell();
+
+        send_raw_message(msg, 3); ;; pay transfer fees separately
+
+    } elseif (op == op::create_channel) {
+        ;; Create payment channel
+        ;; Message body: op# create_channel participant:MsgAddressInt capacity:Coins duration:uint32
+        slice participant = in_msg_body~load_msg_addr();
+        int capacity = in_msg_body~load_coins();
+        uint32 duration = in_msg_body~load_uint(32);
+
+        throw_unless(410, capacity <= balance);
+
+        ;; Update balance (lock funds for channel)
+        balance -= capacity;
+        channel_count += 1;
+        save_data(owner, balance, channel_count);
+
+        ;; Store channel data in separate cell
+        cell channel_data = begin_cell()
+            .store_slice(participant)
+            .store_coins(capacity)
+            .store_uint(now() + duration, 64) ;; expiry
+            .store_coins(0) ;; spent amount
+            .end_cell();
+
+        ;; Store channel in map (simplified)
+        ;; In production, use a proper dictionary
+
+        ;; Send channel created notification
+        var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(participant)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(0x4348414e4e454c43524541, 32) ;; CHANNEL_CREATED
+            .store_ref(channel_data)
+            .end_cell();
+
+        send_raw_message(msg, 64);
+
+    } elseif (op == op::channel_payment) {
+        ;; Payment through channel (zero fee)
+        ;; Message body: op# channel_payment channel_id:uint32 amount:Coins recipient:MsgAddressInt
+        uint32 channel_id = in_msg_body~load_uint(32);
+        int amount = in_msg_body~load_coins();
+        slice recipient = in_msg_body~load_msg_addr();
+
+        ;; Verify channel exists and has capacity
+        ;; In production, load channel data from storage
+
+        ;; Process channel payment (no blockchain fee)
+        ;; Just update internal balances
+
+        ;; Send notification
+        var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(recipient)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(0x4348414e4e454c5041594d44, 32) ;; CHANNEL_PAID
+            .store_uint(channel_id, 32)
+            .store_coins(amount)
+            .end_cell();
+
+        send_raw_message(msg, 64);
+
+    } else {
+        ;; Unknown operation
+        throw(0xffff);
+    }
+}
+
+;; External message for getting info
+() recv_external(slice in_msg) impure {
+    ;; Parse signature and verify
+    throw(0xffff); ;; Not implemented in this demo
+}

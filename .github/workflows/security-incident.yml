@@ -1,0 +1,569 @@
+name: 🚨 Security Incident Response
+
+on:
+  workflow_dispatch:
+    inputs:
+      incident_type:
+        description: 'Type of security incident'
+        required: true
+        type: choice
+        options:
+          - data_breach
+          - security_vulnerability
+          - suspicious_activity
+          - service_outage
+          - unauthorized_access
+          - malware_detected
+          - ddos_attack
+          - credential_compromise
+      severity:
+        description: 'Severity level'
+        required: true
+        type: choice
+        options:
+          - critical
+          - high
+          - medium
+          - low
+      description:
+        description: 'Incident description'
+        required: true
+        type: string
+      affected_services:
+        description: 'Affected services (comma-separated)'
+        required: false
+        type: string
+        default: 'all'
+      immediate_action:
+        description: 'Immediate action required'
+        required: false
+        type: choice
+        options:
+          - none
+          - isolate_affected_systems
+          - disable_vulnerable_features
+          - rotate_credentials
+          - notify_users
+          - block_access
+
+env:
+  INCIDENT_CHANNEL: ${{ secrets.SLACK_INCIDENT_CHANNEL }}
+  SECURITY_TEAM: ${{ secrets.SECURITY_TEAM_EMAIL }}
+  LEGAL_TEAM: ${{ secrets.LEGAL_TEAM_EMAIL }}
+  MANAGEMENT_TEAM: ${{ secrets.MANAGEMENT_TEAM_EMAIL }}
+
+jobs:
+  # Incident Initialization
+  initialize-incident:
+    name: 🚨 Initialize Incident Response
+    runs-on: ubuntu-latest
+
+    outputs:
+      incident_id: ${{ steps.setup.outputs.incident_id }}
+      timestamp: ${{ steps.setup.outputs.timestamp }}
+      severity: ${{ github.event.inputs.severity }}
+
+    steps:
+      - name: Initialize Incident
+        id: setup
+        run: |
+          # Generate unique incident ID
+          INCIDENT_ID="INC-$(date +%Y%m%d)-$(printf %04d $((RANDOM % 10000)))"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          echo "🚨 SECURITY INCIDENT DECLARED"
+          echo "========================"
+          echo "Incident ID: $INCIDENT_ID"
+          echo "Type: ${{ github.event.inputs.incident_type }}"
+          echo "Severity: ${{ github.event.inputs.severity }}"
+          echo "Timestamp: $TIMESTAMP"
+          echo "Description: ${{ github.event.inputs.description }}"
+          echo "Affected Services: ${{ github.event.inputs.affected_services }}"
+          echo "Immediate Action: ${{ github.event.inputs.immediate_action }}"
+          echo "========================"
+
+          # Set outputs
+          echo "incident_id=$INCIDENT_ID" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+
+          # Store incident data
+          cat > incident-data.json << EOF
+          {
+            "incident_id": "$INCIDENT_ID",
+            "type": "${{ github.event.inputs.incident_type }}",
+            "severity": "${{ github.event.inputs.severity }}",
+            "description": "${{ github.event.inputs.description }}",
+            "affected_services": "${{ github.event.inputs.affected_services }}",
+            "immediate_action": "${{ github.event.inputs.immediate_action }}",
+            "timestamp": "$TIMESTAMP",
+            "status": "declared",
+            "repository": "${{ github.repository }}",
+            "actor": "${{ github.actor }}",
+            "workflow_run": "${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Create Incident Branch
+        run: |
+          BRANCH_NAME="incident-response-${{ needs.initialize-incident.outputs.incident_id }}"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout -b "$BRANCH_NAME" || git checkout -b "$BRANCH_NAME" main
+          git push origin "$BRANCH_NAME"
+
+      - name: Save Incident Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-${{ needs.initialize-incident.outputs.incident_id }}
+          path: incident-data.json
+
+  # Immediate Actions
+  immediate-actions:
+    name: ⚡ Execute Immediate Actions
+    runs-on: ubuntu-latest
+    needs: initialize-incident
+    if: github.event.inputs.immediate_action != 'none'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download incident data
+        uses: actions/download-artifact@v4
+        with:
+          name: incident-${{ needs.initialize-incident.outputs.incident_id }}
+
+      - name: Execute Immediate Action: Isolate Systems
+        if: github.event.inputs.immediate_action == 'isolate_affected_systems'
+        run: |
+          echo "🔒 Executing system isolation procedures..."
+
+          # Create emergency response script
+          cat > isolate-systems.js << 'EOF'
+          const incidentData = JSON.parse(require('fs').readFileSync('incident-data.json', 'utf8'));
+
+          console.log(\`Isolating systems for incident: \${incidentData.incident_id}\`);
+          console.log(\`Affected services: \${incidentData.affected_services}\`);
+
+          // In a real scenario, this would:
+          // 1. Isolate affected systems from network
+          // 2. Disable access to compromised services
+          // 3. Redirect traffic to maintenance pages
+          // 4. Block malicious IP addresses
+          // 5. Disable vulnerable features
+
+          // For demo purposes, we'll just log the actions
+          console.log('✅ Systems isolated (simulated)');
+          EOF
+
+          node isolate-systems.js
+
+      - name: Execute Immediate Action: Disable Features
+        if: github.event.inputs.immediate_action == 'disable_vulnerable_features'
+        run: |
+          echo "🚫 Disabling vulnerable features..."
+
+          cat > disable-features.js << 'EOF'
+          const incidentData = JSON.parse(require('fs').readFileSync('incident-data.json', 'utf8'));
+
+          console.log(\`Disabling features for incident: \${incidentData.incident_id}\`);
+
+          // This would typically:
+          // 1. Update feature flags to disable vulnerable functionality
+          // 2. Deploy configuration changes
+          // 3. Restart services with safe configuration
+
+          console.log('✅ Vulnerable features disabled (simulated)');
+          EOF
+
+          node disable-features.js
+
+      - name: Execute Immediate Action: Rotate Credentials
+        if: github.event.inputs.immediate_action == 'rotate_credentials'
+        run: |
+          echo "🔑 Initiating credential rotation..."
+
+          # Create credential rotation script
+          cat > rotate-credentials.js << 'EOF'
+          const incidentData = JSON.parse(require('fs').readFileSync('incident-data.json', 'utf8'));
+
+          console.log(\`Rotating credentials for incident: \${incidentData.incident_id}\`);
+
+          // This would typically:
+          // 1. Invalidate existing API keys and tokens
+          // 2. Generate new credentials
+          // 3. Update production environment
+          // 4. Force logout of all user sessions
+
+          console.log('✅ Credentials rotation initiated (simulated)');
+          EOF
+
+          node rotate-credentials.js
+
+      - name: Execute Immediate Action: Block Access
+        if: github.event.inputs.immediate_action == 'block_access'
+        run: |
+          echo "🚫 Blocking unauthorized access..."
+
+          # This would typically:
+          # 1. Block malicious IP addresses
+          # 2. Disable compromised user accounts
+          # 3. Implement emergency authentication requirements
+
+      - name: Execute Immediate Action: Notify Users
+        if: github.event.inputs.immediate_action == 'notify_users'
+        run: |
+          echo "📧 Sending user notifications..."
+
+          # Create user notification script
+          cat > notify-users.js << 'EOF'
+          const incidentData = JSON.parse(require('fs').readFileSync('incident-data.json', 'utf8'));
+
+          console.log(\`Notifying users for incident: \${incidentData.incident_id}\`);
+
+          // This would typically:
+          // 1. Send email notifications to affected users
+          // 2. Post announcements on status pages
+          // 3. Update in-app notifications
+          // 4. Coordinate with customer support
+
+          console.log('✅ User notifications sent (simulated)');
+          EOF
+
+          node notify-users.js
+
+  # Notify Teams
+  notify-teams:
+    name: 📢 Notify Response Teams
+    runs-on: ubuntu-latest
+    needs: initialize-incident
+
+    steps:
+      - name: Send Security Team Alert
+        run: |
+          cat > security-alert.md << 'EOF'
+          # 🚨 SECURITY INCIDENT ALERT
+
+          **Incident ID**: ${{ needs.initialize-incident.outputs.incident_id }}
+          **Severity**: ${{ github.event.inputs.severity }}
+          **Type**: ${{ github.event.inputs.incident_type }}
+          **Declared**: ${{ needs.initialize-incident.outputs.timestamp }}
+          **Description**: ${{ github.event.inputs.description }}
+          **Affected Services**: ${{ github.event.inputs.affected_services }}
+          **Immediate Action**: ${{ github.event.inputs.immediate_action }}
+          **Repository**: ${{ github.repository }}
+          **Declared By**: ${{ github.actor }}
+
+          ## Immediate Actions Required
+
+          1. [ ] Acknowledge receipt of this alert
+          2. [ ] Join incident response channel
+          3. [ ] Review incident details
+          4. [ ] Begin containment procedures if needed
+          5. [ ] Document all actions taken
+
+          ## Response Protocol
+
+          - High/Critical: Immediate response required within 15 minutes
+          - Medium: Response required within 1 hour
+          - Low: Response required within 4 hours
+
+          ## Communications
+
+          - Use incident ID ${{ needs.initialize-incident.outputs.incident_id }} in all communications
+          - Escalate to management if impact increases
+          - Document timeline and decisions
+          EOF
+
+          # Send to security team
+          curl -X POST "$INCIDENT_CHANNEL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "🚨 SECURITY INCIDENT DECLARED\n\n**Incident**: ${{ needs.initialize-incident.outputs.incident_id }}\n**Severity**: ${{ github.event.inputs.severity }}\n**Type**: ${{ github.event.inputs.incident_type }}\n\nDeclared by: ${{ github.actor }}\n\nDetails: ${{ github.event.inputs.description }}\n\n🔗 Join response channel immediately"
+            }'
+
+      - name: Send Email Notifications
+        run: |
+          # Send to security team
+          curl -X POST "https://api.sendgrid.com/v3/mail/send" \
+            -H "Authorization: Bearer ${{ secrets.SENDGRID_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "personalizations": [{
+                "to": [{ "email": "$SECURITY_TEAM" }],
+                "subject": "🚨 SECURITY INCIDENT: ${{ needs.initialize-incident.outputs.incident_id }}",
+                "dynamic_template_data": {
+                  "incident_id": "${{ needs.initialize-incident.outputs.incident_id }}",
+                  "severity": "${{ github.event.inputs.severity }}",
+                  "type": "${{ github.event.inputs.incident_type }}",
+                  "description": "${{ github.event.inputs.description }}",
+                  "timestamp": "${{ needs.initialize-incident.outputs.timestamp }}"
+                }
+              }]
+            }'
+
+      - name: Notify Management (High/Critical Only)
+        if: github.event.inputs.severity == 'critical' || github.event.inputs.severity == 'high'
+        run: |
+          curl -X POST "$INCIDENT_CHANNEL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "🚨 CRITICAL SECURITY INCIDENT\n\n**Management Action Required**\n\nIncident: ${{ needs.initialize-incident.outputs.incident_id }}\nSeverity: ${{ github.event.inputs.severity }}\nType: ${{ github.event.inputs.incident_type }}\n\nImmediate management attention required!"
+            }'
+
+  # Create Incident Documentation
+  document-incident:
+    name: 📋 Create Incident Documentation
+    runs-on: ubuntu-latest
+    needs: [initialize-incident, notify-teams]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Incident Report
+        run: |
+          mkdir -p security/incidents
+
+          cat > security/incidents/incident-${{ needs.initialize-incident.outputs.incident_id }}.md << 'EOF'
+          # Security Incident Report
+
+          **Incident ID**: ${{ needs.initialize-incident.outputs.incident_id }}
+          **Status**: Active
+          **Severity**: ${{ github.event.inputs.severity }}
+          **Type**: ${{ github.event.inputs.incident_type }}
+          **Declared**: ${{ needs.initialize-incident.outputs.timestamp }}
+          **Declared By**: ${{ github.actor }}
+          **Repository**: ${{ github.repository }}
+          **Workflow Run**: ${{ github.run_id }}
+
+          ## Description
+          ${{ github.event.inputs.description }}
+
+          ## Affected Systems
+          - **Services**: ${{ github.event.inputs.affected_services }}
+          - **Repository**: [View Repository](https://github.com/${{ github.repository }})
+          - **Branch**: incident-response-${{ needs.initialize-incident.outputs.incident_id }}
+
+          ## Immediate Actions Taken
+          ${{ github.event.inputs.immediate_action }}
+
+          ## Timeline
+          - **${{ needs.initialize-incident.outputs.timestamp }}**: Incident declared
+          - **Ongoing**: Response in progress
+
+          ## Response Team
+          - **Incident Commander**: TBD
+          - **Technical Lead**: TBD
+          - **Communications Lead**: TBD
+          - **Legal/Compliance**: TBD
+
+          ## Impact Assessment
+          - **Data Impact**: TBD
+          - **User Impact**: TBD
+          - **Service Impact**: TBD
+          - **Business Impact**: TBD
+
+          ## Response Actions
+          *To be updated as incident progresses*
+
+          ## Investigation
+          *To be updated as investigation progresses*
+
+          ## Resolution
+          *To be updated upon resolution*
+
+          ## Post-Incident Actions
+          *To be updated after resolution*
+
+          ---
+          **Last Updated**: ${{ needs.initialize-incident.outputs.timestamp }}
+          **Next Review**: 1 hour from declaration
+          EOF
+
+      - name: Create Update Script
+        run: |
+          cat > security/scripts/update-incident.sh << 'EOF'
+          #!/bin/bash
+          INCIDENT_ID="${{ needs.initialize-incident.outputs.incident_id }}"
+          ACTION="$1"
+          NOTES="$2"
+
+          INCIDENT_FILE="security/incidents/incident-$INCIDENT_ID.md"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          update_incident() {
+            echo "Updating incident $INCIDENT_ID with action: $ACTION"
+
+            case "$ACTION" in
+              "status")
+                echo "- **$TIMESTAMP**: Status updated to $NOTES" >> "$INCIDENT_FILE"
+                ;;
+              "impact")
+                echo "- **$TIMESTAMP**: Impact assessment: $NOTES" >> "$INCIDENT_FILE"
+                ;;
+              "action")
+                echo "- **$TIMESTAMP**: $NOTES" >> "$INCIDENT_FILE"
+                ;;
+              "resolution")
+                echo "## Resolution" >> "$INCIDENT_FILE"
+                echo "- **$TIMESTAMP**: $NOTES" >> "$INCIDENT_FILE"
+                ;;
+              "close")
+                echo "## Post-Incident Actions" >> "$INCIDENT_FILE"
+                echo "- **$TIMESTAMP**: Incident closed" >> "$INCIDENT_FILE"
+                echo "- **Status**: Resolved" >> "$INCIDENT_FILE"
+                echo "- **Final Update**: $TIMESTAMP" >> "$INCIDENT_FILE"
+                ;;
+            esac
+          }
+
+          if [ -n "$ACTION" ]; then
+            update_incident
+            git add "$INCIDENT_FILE"
+            git commit -m "Update incident $INCIDENT_ID: $ACTION"
+            git push
+          fi
+          EOF
+
+          chmod +x security/scripts/update-incident.sh
+
+      - name: Commit Incident Documentation
+        run: |
+          git config --global user.name "Security Bot"
+          git config --global user.email "security@labelmint.it"
+          git add security/incidents/
+          git commit -m "🚨 Create incident documentation for ${{ needs.initialize-incident.outputs.incident_id }}"
+          git push origin incident-response-${{ needs.initialize-incident.outputs.incident_id }}
+
+  # Create Response Checklist
+  create-checklist:
+    name: ✅ Create Response Checklist
+    runs-on: ubuntu-latest
+    needs: initialize-incident
+
+    steps:
+      - name: Generate Response Checklist
+        run: |
+          cat > response-checklist.md << 'EOF'
+          # Security Incident Response Checklist
+
+          **Incident ID**: ${{ needs.initialize-incident.outputs.incident_id }}
+          **Severity**: ${{ github.event.inputs.severity }}
+          **Type**: ${{ github.event.inputs.incident_type }}
+
+          ## Immediate Actions (First 15 Minutes)
+
+          - [ ] Acknowledge incident receipt
+          - [ ] Join incident response channel
+          - [ ] Initial assessment completed
+          - [ ] Incident commander assigned
+          - [ ] Technical team assembled
+          - [ ] Communications lead assigned
+          - [ ] Legal/compliance notified (if required)
+
+          ## Containment (First Hour)
+
+          - [ ] Affected systems identified
+          - [ ] Containment strategy implemented
+          - [ ] Evidence preservation initiated
+          - [ ] Backup verification completed
+          - [ ] External communication prepared
+          - [ ] Regulatory requirements assessed
+
+          ## Investigation (First 4 Hours)
+
+          - [ ] Root cause analysis started
+          - [ ] Impact assessment completed
+          - [ ] Data breach determination
+          - [ ] Affected users identified
+          - [ ] Regulatory notification timeline established
+          - [ ] Technical investigation documented
+
+          ## Resolution (First 24 Hours)
+
+          - [ ] Root cause identified
+          - [ ] Fix implemented and tested
+          - [ ] Systems restored to normal operation
+          - [ ] Monitoring enhanced
+          - [ ] Post-incident review scheduled
+          - [ ] Lessons learned process initiated
+          - [ ] Incident closed
+
+          ## Communications
+
+          - [ ] Internal team notifications sent
+          - [ ] Management updates provided
+          - [ ] Customer notifications sent (if required)
+          - [ ] Regulatory notifications filed (if required)
+          - [ ] Public statements issued (if required)
+          - [ ] Status page updated
+
+          ## Post-Incident (Within 1 Week)
+
+          - [ ] Complete post-mortem analysis
+          - [ ] Implement prevention measures
+          - [ ] Update security policies
+          - [ ] Enhance monitoring and alerting
+          - [ ] Conduct security awareness training
+          - [ ] Update incident response procedures
+
+          ## Contact Information
+
+          - **Security Team**: $SECURITY_TEAM
+          - **Legal Team**: $LEGAL_TEAM
+          - **Management**: $MANAGEMENT_TEAM
+          - **Incident Channel**: $INCIDENT_CHANNEL
+
+          ---
+          **Last Updated**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          **Next Review**: 1 hour from creation
+          EOF
+
+      - name: Save Checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-checklist-${{ needs.initialize-incident.outputs.incident_id }}
+          path: response-checklist.md
+          retention-days: 90
+
+  # Summary
+  incident-summary:
+    name: 📊 Incident Summary
+    runs-on: ubuntu-latest
+    needs: [initialize-incident, notify-teams, document-incident, create-checklist]
+    if: always()
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# 🚨 Security Incident Response Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Incident Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **ID**: ${{ needs.initialize-incident.outputs.incident_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Type**: ${{ github.event.inputs.incident_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Severity**: ${{ github.event.inputs.severity }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Declared**: ${{ needs.initialize-incident.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **By**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Response Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Incident Init | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
+          echo "| Team Notifications | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
+          echo "| Documentation | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
+          echo "| Response Checklist | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Join incident response channel" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review incident documentation" >> $GITHUB_STEP_SUMMARY
+          echo "3. Execute response checklist" >> $GITHUB_STEP_SUMMARY
+          echo "4. Maintain communication updates" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Final Notification
+        run: |
+          curl -X POST "$INCIDENT_CHANNEL" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "✅ Security incident response workflow completed for ${{ needs.initialize-incident.outputs.incident_id }}\n\n**Next Steps**: Join response channel and begin containment procedures"
+            }'

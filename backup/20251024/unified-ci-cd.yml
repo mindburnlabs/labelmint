@@ -1,0 +1,613 @@
+name: Unified CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop, staging]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run comprehensive tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      skip_tests:
+        description: 'Skip tests (force deploy)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9.15.1'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CACHE_VERSION: v2
+
+# Global permissions for security and deployment
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  statuses: write
+  actions: read
+  checks: write
+  security-events: write
+  id-token: write
+
+jobs:
+  # ===========================================
+  # Code Quality & Security (Parallel)
+  # ===========================================
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ env.CACHE_VERSION }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-${{ env.CACHE_VERSION }}-
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run Prettier check
+        run: pnpm format:check
+
+      - name: Run TypeScript check
+        run: pnpm type-check
+
+      - name: Run security audit
+        run: pnpm audit --audit-level high
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Upload Snyk results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            .pnpm-store
+          key: ${{ runner.os }}-node-modules-${{ env.CACHE_VERSION }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-${{ env.CACHE_VERSION }}-
+
+  # ===========================================
+  # Security Scanning (Parallel)
+  # ===========================================
+  security-scan:
+    name: Advanced Security Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          languages: javascript, typescript
+          queries: +security-extended,security-and-quality
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+            p/nodejs
+            p/typescript
+
+      - name: Run npm audit fix
+        run: |
+          pnpm audit --audit-level moderate --fix || true
+
+  # ===========================================
+  # Testing Matrix (Parallel)
+  # ===========================================
+  test-matrix:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: code-quality
+    if: github.event.inputs.skip_tests != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "Unit Tests"
+            script: "test:unit"
+            node: "20"
+            coverage: true
+          - name: "Integration Tests"
+            script: "test:integration"
+            node: "20"
+            services: ["postgres", "redis"]
+          - name: "E2E Tests"
+            script: "test:e2e"
+            node: "20"
+            services: ["postgres", "redis"]
+          - name: "Contract Tests"
+            script: "test:contracts"
+            node: "20"
+            foundry: true
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+          POSTGRES_DB: labelmint_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --shm-size=1gb
+        ports:
+          - 5433:5432
+        if: matrix.services && contains(matrix.services, 'postgres')
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6380:6379
+        if: matrix.services && contains(matrix.services, 'redis')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Restore dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            .pnpm-store
+          key: ${{ runner.os }}-node-modules-${{ env.CACHE_VERSION }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-frozen-lockfile
+
+      - name: Install Foundry
+        if: matrix.foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install Playwright browsers
+        if: matrix.name == 'E2E Tests'
+        run: pnpm exec playwright install --with-deps
+
+      - name: Wait for services
+        if: matrix.services
+        run: |
+          sleep 10
+          for service in ${{ join(matrix.services, ' ') }}; do
+            case $service in
+              postgres)
+                pg_isready -h localhost -p 5433 -U test || exit 1
+                ;;
+              redis)
+                redis-cli -h localhost -p 6380 ping || exit 1
+                ;;
+            esac
+          done
+
+      - name: Setup test database
+        if: matrix.services && contains(matrix.services, 'postgres')
+        run: |
+          PGPASSWORD=test psql -h localhost -p 5433 -U test -d postgres -c "DROP DATABASE IF EXISTS labelmint_test;"
+          PGPASSWORD=test psql -h localhost -p 5433 -U test -d postgres -c "CREATE DATABASE labelmint_test;"
+
+      - name: Run ${{ matrix.name }}
+        run: pnpm ${{ matrix.script }}
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@localhost:5433/labelmint_test
+          REDIS_URL: redis://localhost:6380/1
+          JWT_SECRET: test-jwt-secret
+          TON_RPC_ENDPOINT: https://testnet.toncenter.com/api/v2/jsonRPC
+
+      - name: Upload coverage to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info,./coverage/coverage-final.json
+          flags: ${{ matrix.name }}
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always() && matrix.name == 'E2E Tests'
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ===========================================
+  # Build & Push Docker Images
+  # ===========================================
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scan]
+    if: github.event_name == 'push' || github.event.inputs.skip_tests == 'true'
+    outputs:
+      web-digest: ${{ steps.build-web.outputs.digest }}
+      api-digest: ${{ steps.build-api.outputs.digest }}
+      web-tag: ${{ steps.meta-web.outputs.tags }}
+      api-tag: ${{ steps.meta-api.outputs.tags }}
+    strategy:
+      matrix:
+        component:
+          - { name: web, dockerfile: Dockerfile.web, context: . }
+          - { name: api, dockerfile: Dockerfile.api, context: . }
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1
+            network=host
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta-${{ matrix.component.name }}
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.component.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest-${{ github.ref_name }}
+
+      - name: Build and push Docker image
+        id: build-${{ matrix.component.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-${{ matrix.component.name }}.outputs.tags }}
+          labels: ${{ steps.meta-${{ matrix.component.name }}.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.component.name }}
+          cache-to: type=gha,scope=${{ matrix.component.name }},mode=max
+          build-args: |
+            NODE_VERSION=${{ env.NODE_VERSION }}
+            NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+            NEXT_PUBLIC_BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            NEXT_PUBLIC_COMMIT_BRANCH=${{ github.ref_name }}
+          provenance: true
+          sbom: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.component.name }}:${{ github.ref_name }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ===========================================
+  # Performance Testing
+  # ===========================================
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/staging'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging for performance testing"
+          # Add staging deployment logic here
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: './lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Run k6 load test
+        run: |
+          docker run --rm -i grafana/k6 run - < k6/tests/load-test.js \
+            --env BASE_URL=https://staging.labelmint.it \
+            --env VUS=50 \
+            --env DURATION=2m
+
+  # ===========================================
+  # Deployment
+  # ===========================================
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    needs: [build-and-push, test-matrix]
+    if: (github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
+         (github.ref == 'refs/heads/staging' && github.event_name == 'push') ||
+         (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+         github.event_name == 'workflow_dispatch'
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+      url: ${{ github.ref == 'refs/heads/main' && 'https://labelmint.it' || 'https://staging.labelmint.it' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-duration-seconds: 3600
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8
+          terraform_wrapper: false
+
+      - name: Deploy with Terraform
+        working-directory: ./infrastructure/terraform
+        run: |
+          terraform init -backend-config="bucket=labelmint-terraform-state"
+          terraform workspace select ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+          terraform apply -auto-approve \
+            -var="image_tag_web=${{ needs.build-and-push.outputs.web-tag }}" \
+            -var="image_tag_api=${{ needs.build-and-push.outputs.api-tag }}" \
+            -var="environment=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}"
+
+      - name: Wait for deployment
+        run: |
+          echo "Waiting for services to be ready..."
+          sleep 60
+
+      - name: Run health checks
+        run: |
+          URL="${{ github.ref == 'refs/heads/main' && 'https://labelmint.it' || 'https://staging.labelmint.it' }}"
+          for i in {1..30}; do
+            if curl -f "$URL/api/health" && curl -f "$URL/api/ready"; then
+              echo "Health checks passed!"
+              break
+            fi
+            echo "Attempt $i: Health check failed, retrying in 10 seconds..."
+            sleep 10
+          done
+
+      - name: Run smoke tests
+        run: |
+          URL="${{ github.ref == 'refs/heads/main' && 'https://labelmint.it' || 'https://staging.labelmint.it' }}"
+          pnpm run test:smoke -- --baseUrl="$URL"
+
+      - name: Create rollback point
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag rollback-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}
+          git push origin rollback-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}
+
+      - name: Update deployment status
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: '${{ github.token }}'
+          environment-url: ${{ github.ref == 'refs/heads/main' && 'https://labelmint.it' || 'https://staging.labelmint.it' }}
+          deployment-id: ${{ github.event.deployment.id }}
+          state: 'success'
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: |
+            🚀 Deployment to ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} completed successfully!
+
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref_name }}
+            Actor: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ===========================================
+  # Rollback (Automatic on Failure)
+  # ===========================================
+  auto-rollback:
+    name: Automatic Rollback
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure() && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get previous stable task definition
+        id: previous-task
+        run: |
+          # Get latest rollback tag
+          ROLLBACK_TAG=$(git tag --sort=-version:refname "rollback-*" | head -n 2 | tail -n 1)
+          echo "Rolling back to: $ROLLBACK_TAG"
+
+          # Extract commit hash from tag
+          ROLLBACK_COMMIT=$(echo $ROLLBACK_TAG | cut -d'-' -f3-)
+          echo "rollback-commit=$ROLLBACK_COMMIT" >> $GITHUB_OUTPUT
+          echo "rollback-tag=$ROLLBACK_TAG" >> $GITHUB_OUTPUT
+
+      - name: Rollback deployment
+        run: |
+          # Update ECS service with previous image
+          aws ecs update-service \
+            --cluster labelmint-production \
+            --service labelmint-app \
+            --task-definition labelmint-production:${{ steps.previous-task.outputs.rollback-tag }} \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Wait for rollback
+        run: |
+          aws ecs wait services-stable \
+            --cluster labelmint-production \
+            --services labelmint-app \
+            --region us-east-1
+
+      - name: Verify rollback health
+        run: |
+          sleep 30
+          for i in {1..10}; do
+            if curl -f https://labelmint.it/api/health; then
+              echo "Rollback successful!"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'custom'
+          channel: '#deployments'
+          text: |
+            🚨 Automatic rollback triggered!
+
+            Production rolled back to: ${{ steps.previous-task.outputs.rollback-tag }}
+            Reason: Deployment failure
+            Actor: GitHub Actions
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ===========================================
+  # Cleanup
+  # ===========================================
+  cleanup:
+    name: Cleanup Artifacts
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Delete old artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+
+            const oldArtifacts = artifacts.data.artifacts
+              .filter(a => a.created_at < new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+              .map(a => a.id);
+
+            for (const id of oldArtifacts) {
+              await github.rest.actions.deleteArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: id,
+              });
+            }
+
+      - name: Cleanup Docker images
+        run: |
+          # Clean up old Docker images from registry
+          echo "Cleaning up old Docker images..."
+          # Add cleanup logic here

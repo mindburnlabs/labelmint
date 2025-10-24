@@ -1,0 +1,324 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: labelmintit-config
+  labels:
+    app: labelmintit
+  annotations:
+    checksum/config: "CONFIGMAP_CHECKSUM_PLACEHOLDER"
+data:
+  # Environment Configuration
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  PORT: "3000"
+  METRICS_PORT: "9090"
+
+  # Database Configuration
+  DATABASE_HOST: "postgres.default.svc.cluster.local"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "labelmintit"
+  DATABASE_USER: "labelmintit_user"
+  DATABASE_SSL_MODE: "require"
+  DATABASE_MAX_CONNECTIONS: "20"
+  DATABASE_MIN_CONNECTIONS: "5"
+  DATABASE_IDLE_TIMEOUT: "10000"
+
+  # Redis Configuration
+  REDIS_HOST: "redis.default.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_RETRY_DELAY: "100"
+  REDIS_MAX_RETRIES: "3"
+  REDIS_CONNECT_TIMEOUT: "10000"
+  REDIS_COMMAND_TIMEOUT: "5000"
+
+  # Application Configuration
+  CORS_ORIGINS: "https://labelmintit.com,https://www.labelmintit.com,https://api.labelmintit.com"
+  CORS_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
+  CORS_CREDENTIALS: "true"
+  CORS_MAX_AGE: "86400"
+
+  # Session Configuration
+  SESSION_SECRET: "CHANGE_ME_IN_PRODUCTION"
+  SESSION_MAX_AGE: "86400000" # 24 hours
+  SESSION_SECURE: "true"
+  SESSION_HTTP_ONLY: "true"
+
+  # JWT Configuration
+  JWT_EXPIRY: "24h"
+  JWT_REFRESH_EXPIRY: "7d"
+
+  # Email Configuration
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+  SMTP_SECURE: "false"
+  SMTP_FROM: "noreply@labelmintit.com"
+  EMAIL_FROM_NAME: "DeligateIT"
+
+  # File Upload Configuration
+  UPLOAD_MAX_SIZE: "52428800" # 50MB
+  UPLOAD_ALLOWED_TYPES: "image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  UPLOAD_DESTINATION: "uploads"
+
+  # Rate Limiting Configuration
+  RATE_LIMIT_WINDOW_MS: "900000" # 15 minutes
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  RATE_LIMIT_SKIP_SUCCESSFUL_REQUESTS: "false"
+
+  # Caching Configuration
+  CACHE_TTL: "3600" # 1 hour
+  CACHE_MAX_KEYS: "10000"
+  CACHE_CHECK_PERIOD: "600"
+
+  # Worker Configuration
+  WORKER_CONCURRENCY: "5"
+  WORKER_MAX_JOBS: "1000"
+  WORKER_STALLED_JOB_TIMEOUT: "1800000" # 30 minutes
+
+  # Feature Flags
+  ENABLE_REGISTRATION: "true"
+  ENABLE_EMAIL_VERIFICATION: "true"
+  ENABLE_PASSWORD_RESET: "true"
+  ENABLE_TWO_FACTOR: "false"
+  ENABLE_OAUTH: "true"
+
+  # OAuth Configuration
+  OAUTH_GOOGLE_ENABLED: "true"
+  OAUTH_GITHUB_ENABLED: "true"
+  OAUTH_DISCORD_ENABLED: "false"
+
+  # Monitoring Configuration
+  ENABLE_METRICS: "true"
+  METRICS_PATH: "/metrics"
+  ENABLE_HEALTH_CHECK: "true"
+  HEALTH_CHECK_PATH: "/health"
+  ENABLE_READINESS_CHECK: "true"
+  READINESS_CHECK_PATH: "/ready"
+
+  # Logging Configuration
+  LOG_FORMAT: "json"
+  LOG_FILE_PATH: "/app/logs/app.log"
+  LOG_MAX_FILES: "10"
+  LOG_MAX_SIZE: "100m"
+  LOG_COMPRESS: "true"
+
+  # Security Configuration
+  BCRYPT_ROUNDS: "12"
+  PASSWORD_MIN_LENGTH: "8"
+  PASSWORD_REQUIRE_UPPERCASE: "true"
+  PASSWORD_REQUIRE_LOWERCASE: "true"
+  PASSWORD_REQUIRE_NUMBERS: "true"
+  PASSWORD_REQUIRE_SYMBOLS: "false"
+
+  # API Configuration
+  API_VERSION: "v1"
+  API_PREFIX: "/api"
+  API_DOCS_ENABLED: "true"
+  API_DOCS_PATH: "/docs"
+
+  # CDN Configuration
+  CDN_BASE_URL: "https://cdn.labelmintit.com"
+  CDN_UPLOADS_PATH: "/uploads"
+  CDN_ASSETS_PATH: "/assets"
+
+  # Stripe Configuration (public)
+  STRIPE_WEBHOOK_SECRET: "whsec_xxx"
+
+  # OpenAI Configuration
+  OPENAI_MODEL: "gpt-4"
+  OPENAI_MAX_TOKENS: "4096"
+  OPENAI_TEMPERATURE: "0.7"
+  OPENAI_TOP_P: "1.0"
+
+  # Cron Configuration
+  CRON_CLEANUP_ENABLED: "true"
+  CRON_CLEANUP_SCHEDULE: "0 2 * * *"
+  CRON_REPORT_SCHEDULE: "0 6 * * 1" # Weekly on Monday
+
+  # Notification Configuration
+  NOTIFICATION_BATCH_SIZE: "100"
+  NOTIFICATION_RETRY_ATTEMPTS: "3"
+  NOTIFICATION_RETRY_DELAY: "5000"
+
+  # Search Configuration
+  SEARCH_RESULTS_PER_PAGE: "20"
+  SEARCH_MAX_RESULTS: "100"
+  SEARCH_INDEX_NAME: "labelmintit"
+
+  # Localization Configuration
+  DEFAULT_LANGUAGE: "en"
+  SUPPORTED_LANGUAGES: "en,es,fr,de,it,pt,zh,ja,ko"
+  TIMEZONE: "UTC"
+
+---
+# Nginx Configuration for sidecar (if needed)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  labels:
+    app: labelmintit
+data:
+  nginx.conf: |
+    upstream app {
+        server 127.0.0.1:3000;
+        keepalive 32;
+    }
+
+    server {
+        listen 8080;
+        server_name _;
+
+        client_max_body_size 50M;
+
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_types
+            text/plain
+            text/css
+            text/xml
+            text/javascript
+            application/javascript
+            application/xml+rss
+            application/json;
+
+        location / {
+            proxy_pass http://app;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+            proxy_read_timeout 300s;
+            proxy_connect_timeout 75s;
+        }
+
+        location /health {
+            proxy_pass http://app;
+            access_log off;
+        }
+    }
+
+---
+# Fluent Bit Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentbit-config
+  labels:
+    app: labelmintit
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        5
+        Daemon       Off
+        Log_Level    info
+        Parsers_File parsers.conf
+
+    [INPUT]
+        Name                tail
+        Path                /app/logs/*.log
+        Path_Key            filename
+        Exclude_Path        /app/logs/*.gz
+        DB                  /var/log/flb_app.db
+        Tag                 app.*
+        Buffer_Chunk_Size   1M
+        Buffer_Max_Size     1M
+        Rotate_Wait         30
+
+    [FILTER]
+        Name modify
+        Match app.*
+        Add service labelmintit
+        Add environment production
+
+    [OUTPUT]
+        Name  forward
+        Match app.*
+        Host  fluentd.default.svc.cluster.local
+        Port  24224
+
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+    [PARSER]
+        Name        app_log
+        Format      regex
+        Regex       ^(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (?<level>\w+) \[(?<pid>\d+)\] (?<message>.*)$
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+---
+# Prometheus Config (if using sidecar)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    app: labelmintit
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - "rules/*.yml"
+
+    scrape_configs:
+      - job_name: 'labelmintit'
+        static_configs:
+          - targets: ['localhost:3000']
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+
+      - job_name: 'labelmintit-metrics'
+        static_configs:
+          - targets: ['localhost:9090']
+        metrics_path: '/metrics'
+        scrape_interval: 15s
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+  alert_rules.yml: |
+    groups:
+      - name: labelmintit.rules
+        rules:
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is {{ $value }} errors per second"
+
+          - alert: HighMemoryUsage
+            expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage"
+              description: "Memory usage is above 90%"

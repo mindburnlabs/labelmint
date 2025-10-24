@@ -1,0 +1,143 @@
+# Multi-stage Dockerfile for API Services with Security Best Practices
+# ===================================================================
+
+# Build stage for dependencies
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat ca-certificates tzdata python3 make g++
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@9.15.1
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* ./
+COPY services/labeling-backend/package.json ./services/labeling-backend/
+COPY services/payment-backend/package.json ./services/payment-backend/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install dependencies with frozen lockfile
+RUN pnpm install --frozen-lockfile --prefer-frozen-lockfile
+
+# Builder stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@9.15.1
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/services/labeling-backend/node_modules ./services/labeling-backend/node_modules
+COPY --from=deps /app/services/payment-backend/node_modules ./services/payment-backend/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+
+# Copy source code
+COPY . .
+
+# Build arguments for version tracking
+ARG APP_VERSION
+ARG BUILD_DATE
+ARG COMMIT_BRANCH
+
+# Environment variables for build
+ENV NODE_ENV=production
+ENV APP_VERSION=${APP_VERSION:-unknown}
+ENV BUILD_DATE=${BUILD_DATE:-unknown}
+ENV COMMIT_BRANCH=${COMMIT_BRANCH:-unknown}
+
+# Build TypeScript
+RUN pnpm run build:backend
+
+# Production runner stage - Labeling Backend
+FROM node:20-alpine AS labeling-backend
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    tzdata \
+    dumb-init \
+    postgresql-client \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user with proper UID/GID
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --gid 1001 nodejs
+
+# Copy built application with correct permissions
+COPY --from=builder --chown=nodejs:nodejs /app/services/labeling-backend/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/services/labeling-backend/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/services/labeling-backend/drizzle.config.ts ./
+COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/dist ./shared
+COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/package.json ./shared/package.json
+
+# Copy pnpm lock file for potential runtime installs
+COPY --chown=nodejs:nodejs pnpm-lock.yaml ./
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 3001
+
+# Health check with proper timeout and retries
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "dist/index.js"]
+
+# Production runner stage - Payment Backend
+FROM node:20-alpine AS payment-backend
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    tzdata \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user with proper UID/GID
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --gid 1001 nodejs
+
+# Copy built application with correct permissions
+COPY --from=builder --chown=nodejs:nodejs /app/services/payment-backend/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/services/payment-backend/package.json ./package.json
+COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/dist ./shared
+COPY --from=builder --chown=nodejs:nodejs /app/packages/shared/package.json ./shared/package.json
+
+# Copy pnpm lock file for potential runtime installs
+COPY --chown=nodejs:nodejs pnpm-lock.yaml ./
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3003
+ENV HOSTNAME=0.0.0.0
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 3003
+
+# Health check with proper timeout and retries
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3003/health || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "dist/index.js"]

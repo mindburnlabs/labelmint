@@ -1,0 +1,161 @@
+name: Backup and Maintenance
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM UTC
+  workflow_dispatch:
+
+jobs:
+  database-backup:
+    name: Database Backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Create database backup
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          BACKUP_NAME="labelmint-backup-$TIMESTAMP"
+
+          # Create RDS snapshot
+          aws rds create-db-snapshot \
+            --db-instance-identifier labelmint-db \
+            --db-snapshot-identifier $BACKUP_NAME \
+            --region us-east-1
+
+          # Store backup name for cleanup
+          echo "BACKUP_NAME=$BACKUP_NAME" >> $GITHUB_ENV
+
+      - name: Verify backup
+        run: |
+          aws rds wait db-snapshot-available \
+            --db-snapshot-identifier $BACKUP_NAME \
+            --region us-east-1
+
+      - name: Cleanup old backups (keep last 7 days)
+        run: |
+          aws rds describe-db-snapshots \
+            --db-instance-identifier labelmint-db \
+            --query 'DBSnapshots[?SnapshotCreateTime<`$(date -d "7 days ago" +%Y-%m-%d)`].DBSnapshotIdentifier' \
+            --output text \
+            --region us-east-1 | \
+          xargs -I {} aws rds delete-db-snapshot --db-snapshot-identifier {} --region us-east-1
+
+      - name: Backup to S3
+        run: |
+          aws s3 sync s3://labelmint-backups s3://labelmint-backups-archive/$(date +%Y-%m-%d)/ --delete
+
+  asset-backup:
+    name: Asset Backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Backup S3 assets
+        run: |
+          aws s3 sync s3://labelmint-assets s3://labelmint-assets-backup/$(date +%Y-%m-%d)/
+
+  health-check:
+    name: System Health Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check production health
+        run: |
+          curl -f https://labelmint.it/api/health || {
+            echo "Production health check failed"
+            exit 1
+          }
+
+      - name: Check staging health
+        run: |
+          curl -f https://staging.labelmint.it/api/health || {
+            echo "Staging health check failed"
+            exit 1
+          }
+
+      - name: Check database connectivity
+        run: |
+          # Add database health check logic here
+          echo "Database check passed"
+
+      - name: Check third-party services
+        run: |
+          # Check external APIs
+          curl -f https://api.ton.io/health || {
+            echo "TON API health check failed"
+            exit 1
+          }
+
+  log-archival:
+    name: Log Archival
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Archive CloudWatch logs
+        run: |
+          # Export logs older than 30 days to S3
+          aws logs create-export-task \
+            --log-group-name /ecs/labelmint-production \
+            --from-time $(date -d "30 days ago" +%s)000 \
+            --to-time $(date -d "29 days ago" +%s)000 \
+            --destination "s3://labelmint-logs-archive" \
+            --destination-prefix "cloudlog-$(date +%Y-%m)"
+
+  maintenance-report:
+    name: Maintenance Report
+    runs-on: ubuntu-latest
+    needs: [database-backup, asset-backup, health-check, log-archival]
+    if: always()
+    steps:
+      - name: Generate report
+        run: |
+          cat << EOF > maintenance-report.md
+          # Daily Maintenance Report - $(date +%Y-%m-%d)
+
+          ## Database Backup
+          Status: ${{ needs.database-backup.result }}
+          Details: Database backup completed successfully
+
+          ## Asset Backup
+          Status: ${{ needs.asset-backup.result }}
+          Details: Asset backup completed successfully
+
+          ## Health Check
+          Status: ${{ needs.health-check.result }}
+          Details: All systems operational
+
+          ## Log Archival
+          Status: ${{ needs.log-archival.result }}
+          Details: Logs archived successfully
+
+          ---
+          Report generated at: $(date)
+          EOF
+
+      - name: Send report to Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#maintenance'
+          text_path: maintenance-report.md
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

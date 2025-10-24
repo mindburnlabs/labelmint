@@ -1,0 +1,195 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'security-alerts@labelmint.it'
+  smtp_auth_username: 'security-alerts@labelmint.it'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'security-team'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'critical-security-alerts'
+      group_wait: 0s
+      repeat_interval: 15m
+    - match:
+        severity: high
+      receiver: 'high-security-alerts'
+      repeat_interval: 30m
+    - match:
+        severity: medium
+      receiver: 'medium-security-alerts'
+      repeat_interval: 1h
+    - match:
+        severity: low
+      receiver: 'low-security-alerts'
+      repeat_interval: 4h
+
+receivers:
+  - name: 'critical-security-alerts'
+    email_configs:
+      - to: 'security-team@labelmint.it,management@labelmint.it'
+        subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }} on {{ .GroupLabels.service }}'
+        body: |
+          🚨 **CRITICAL SECURITY ALERT** 🚨
+
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Severity**: Critical
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          **Details**:
+          {{ range .Alerts }}
+          - Value: {{ .Annotations.value }}
+          - Metric: {{ .Annotations.metric }}
+          {{ end }}
+
+          **Immediate Action Required**:
+          1. Join incident response channel
+          2. Review the affected system
+          3. Implement immediate containment
+          4. Notify management and legal teams
+
+          **Runbook**: https://docs.labelmint.it/security/runbooks/{{ .GroupLabels.alertname }}
+
+    slack_configs:
+      - api_url: '${SLACK_CRITICAL_WEBHOOK}'
+        channel: '#security-critical'
+        title: '🚨 CRITICAL SECURITY ALERT'
+        text: |
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          @security-team @management **IMMEDIATE ACTION REQUIRED**
+
+    webhook_configs:
+      - url: '${SECURITY_WEBHOOK_URL}'
+        send_resolved: true
+
+  - name: 'high-security-alerts'
+    email_configs:
+      - to: 'security-team@labelmint.it'
+        subject: '⚠️ HIGH: {{ .GroupLabels.alertname }} on {{ .GroupLabels.service }}'
+        body: |
+          ⚠️ **HIGH SECURITY ALERT** ⚠️
+
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Severity**: High
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          **Action Required**:
+          1. Review the alert details
+          2. Assess the impact
+          3. Plan remediation actions
+
+    slack_configs:
+      - api_url: '${SLACK_SECURITY_WEBHOOK}'
+        channel: '#security-alerts'
+        title: '⚠️ HIGH SECURITY ALERT'
+        text: |
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          @security-team Please investigate
+
+  - name: 'medium-security-alerts'
+    email_configs:
+      - to: 'security-team@labelmint.it'
+        subject: '📋 MEDIUM: {{ .GroupLabels.alertname }} on {{ .GroupLabels.service }}'
+        body: |
+          📋 **MEDIUM SECURITY ALERT** 📋
+
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Severity**: Medium
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          **Action Required**:
+          1. Review during business hours
+          2. Plan for remediation
+
+    slack_configs:
+      - api_url: '${SLACK_SECURITY_WEBHOOK}'
+        channel: '#security-alerts'
+        title: '📋 MEDIUM SECURITY ALERT'
+        text: |
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+  - name: 'low-security-alerts'
+    email_configs:
+      - to: 'security-team@labelmint.it'
+        subject: 'ℹ️ LOW: {{ .GroupLabels.alertname }} on {{ .GroupLabels.service }}'
+        body: |
+          ℹ️ **LOW SECURITY ALERT** ℹ️
+
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Severity**: Low
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+          **Action Required**:
+          1. Monitor for escalation
+          2. Address during next maintenance window
+
+    slack_configs:
+      - api_url: '${SLACK_SECURITY_WEBHOOK}'
+        channel: '#security-alerts'
+        title: 'ℹ️ LOW SECURITY ALERT'
+        text: |
+          **Alert**: {{ .GroupLabels.alertname }}
+          **Service**: {{ .GroupLabels.service }}
+          **Time**: {{ .Alerts.StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+
+          **Description**: {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+
+  - name: 'security-team'
+    email_configs:
+      - to: 'security-team@labelmint.it'
+        subject: '🔒 Security Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          🔒 **SECURITY ALERT** 🔒
+
+          {{ range .Alerts }}
+          **Alert**: {{ .Annotations.alertname }}
+          **Description**: {{ .Annotations.description }}
+          **Severity**: {{ .Labels.severity }}
+          **Service**: {{ .Labels.service }}
+          **Time**: {{ .StartsAt.Format "2006-01-02T15:04:05Z07:00" }}
+          {{ end }}
+
+inhibit_rules:
+  - source_match:
+      alertname: 'CertificateExpiration'
+    target_match:
+      alertname: 'SSLCertificateCheck'
+    equal: ['service']
+
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'high'
+    equal: ['alertname', 'service']

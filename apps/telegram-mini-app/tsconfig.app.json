@@ -1,0 +1,35 @@
+{
+  "extends": "../../config/shared/tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "useDefineForClassFields": true,
+    "types": ["vite/client"],
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/assets/*": ["./src/assets/*"],
+      "@/config/*": ["./src/config/*"],
+      "@/api/*": ["./src/api/*"],
+      "@/store/*": ["./src/store/*"],
+      "@/contexts/*": ["./src/contexts/*"],
+      "@/constants/*": ["./src/constants/*"],
+      "@labelmint/shared/*": ["../../packages/shared/*"],
+      "@labelmint/ui/*": ["../../packages/ui/*"],
+      "@labelmint/types": ["../../packages/shared/types"],
+      "@labelmint/utils": ["../../packages/shared/utils"],
+      "@labelmint/validation": ["../../packages/shared/validation"],
+      "@labelmint/database": ["../../packages/shared/database"],
+      "@labelmint/auth": ["../../packages/shared/auth"],
+      "@labelmint/config": ["../../packages/shared/config"],
+      "@labelmint/telegram-client": ["../../packages/clients/telegram-client"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,150 @@
+name: Manual Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+      target_tag:
+        description: 'Target tag/commit to rollback to'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  rollback:
+    name: Rollback ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_tag }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Set environment variables
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "CLUSTER=labelmint-production" >> $GITHUB_ENV
+            echo "SERVICE=labelmint-app" >> $GITHUB_ENV
+            echo "TASK_FAMILY=labelmint-production" >> $GITHUB_ENV
+          else
+            echo "CLUSTER=labelmint-staging" >> $GITHUB_ENV
+            echo "SERVICE=labelmint-app" >> $GITHUB_ENV
+            echo "TASK_FAMILY=labelmint-staging" >> $GITHUB_ENV
+          fi
+
+      - name: Build Docker image for rollback
+        id: build
+        run: |
+          docker build -t rollback-image:${{ github.event.inputs.target_tag }} .
+          docker tag rollback-image:${{ github.event.inputs.target_tag }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.target_tag }}
+          echo "image-tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.target_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push rollback image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.target_tag }}
+
+      - name: Update task definition
+        id: task-def
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition ${{ env.TASK_FAMILY }})
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq '.taskDefinition | .containerDefinitions[0].image="${{ steps.build.outputs.image-tag }}" | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          NEW_TASK_INFO=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF")
+          echo "task-definition-arn=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.taskDefinitionArn')" >> $GITHUB_OUTPUT
+
+      - name: Deploy rollback version
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.CLUSTER }} \
+            --service ${{ env.SERVICE }} \
+            --task-definition ${{ steps.task-def.outputs.task-definition-arn }} \
+            --force-new-deployment
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.CLUSTER }} \
+            --services ${{ env.SERVICE }}
+
+      - name: Verify rollback
+        run: |
+          sleep 30
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            curl -f https://labelmint.it/api/health || exit 1
+          else
+            curl -f https://staging.labelmint.it/api/health || exit 1
+          fi
+
+      - name: Create rollback tag
+        run: |
+          git tag rollback-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)-to-${{ github.event.inputs.target_tag }}
+          git push origin rollback-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)-to-${{ github.event.inputs.target_tag }}
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: |
+            🚨 Manual Rollback Completed
+            Environment: ${{ github.event.inputs.environment }}
+            Rolled back to: ${{ github.event.inputs.target_tag }}
+            Reason: ${{ github.event.inputs.reason }}
+            Initiated by: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create rollback issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Rollback to ${{ github.event.inputs.target_tag }} in ${{ github.event.inputs.environment }}`,
+              body: `## Rollback Details
+
+              **Environment:** ${{ github.event.inputs.environment }}
+              **Rolled back to:** ${{ github.event.inputs.target_tag }}
+              **Reason:** ${{ github.event.inputs.reason }}
+              **Initiated by:** ${{ github.actor }}
+              **Timestamp:** ${new Date().toISOString()}
+
+              ### Next Steps
+              - [ ] Investigate the cause of the issue
+              - [ ] Fix the underlying problem
+              - [ ] Run full regression tests
+              - [ ] Plan redeployment
+
+              ---
+              This issue was automatically created during the rollback process.`,
+              labels: ['rollback', 'incident', '${{ github.event.inputs.environment }}']
+            })

@@ -1,0 +1,94 @@
+// Add these models to your existing schema.prisma
+
+model PaymentAlert {
+  id        String   @id @default(cuid())
+  type      String   // 'critical', 'warning', 'info'
+  message   String
+  threshold String
+  currentValue String
+  metadata  Json?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@map("payment_alerts")
+}
+
+model GasPriceData {
+  id                     String   @id @default(cuid())
+  timestamp              DateTime
+  baseFee                String   // in nanoTON
+  priorityFee            String   // in nanoTON
+  networkCongestion      Float    // 0-1 scale
+  estimatedConfirmationTime Int    // in seconds
+  recommendedFee         String   // in nanoTON
+
+  @@map("gas_price_data")
+}
+
+model PaymentMetrics {
+  id                String   @id @default(cuid())
+  timestamp         DateTime
+  type              String   // 'success', 'failure', 'timeout', 'high_gas', 'low_balance'
+  transactionId     String?
+  userId            String?
+  amount            String?
+  fee               String?
+  error             String?
+  gasUsed           String?
+  confirmationTime  Int?     // in milliseconds
+
+  @@map("payment_metrics")
+}
+
+model FeeOptimizationLog {
+  id                String   @id @default(cuid())
+  timestamp         DateTime
+  transactionId     String
+  originalFee       String
+  newFee           String
+  reason           String
+  strategy         String
+  success          Boolean
+
+  @@map("fee_optimization_log")
+}
+
+model BackupPaymentMethod {
+  id          String   @id @default(cuid())
+  name        String   // 'stripe', 'paypal', 'bank_transfer', etc.
+  isActive    Boolean  @default(true)
+  priority    Int      @default(1) // Lower number = higher priority
+  config      Json     // Provider-specific config
+  feeRate     Float    // Fee percentage
+  minAmount   String
+  maxAmount   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("backup_payment_methods")
+}
+
+model BackupTransaction {
+  id              String   @id @default(cuid())
+  originalTxId    String   // Reference to original TON transaction
+  methodId        String
+  amount          String
+  fee             String
+  status          String   // 'pending', 'processing', 'completed', 'failed'
+  externalId      String?  // Provider's transaction ID
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  method          BackupPaymentMethod @relation(fields: [methodId], references: [id])
+
+  @@map("backup_transactions")
+}
+
+// Add to existing TonTransaction model if not present
+// model TonTransaction {
+//   ...
+//   backupTransactions BackupTransaction[]
+//   alerts PaymentAlert[]
+// }

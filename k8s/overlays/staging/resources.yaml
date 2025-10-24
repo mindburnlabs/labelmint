@@ -1,0 +1,33 @@
+---
+# Resource limits for staging
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: labelmintit-staging-limits
+  labels:
+    env: staging
+spec:
+  limits:
+  - default:
+      cpu: "500m"
+      memory: "512Mi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container
+
+---
+# Resource quota for staging
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: labelmintit-staging-quota
+  labels:
+    env: staging
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: "4Gi"
+    limits.cpu: "4"
+    limits.memory: "8Gi"
+    pods: "10"

@@ -1,0 +1,173 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables - NEVER COMMIT THESE
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.staging
+.env.staging.local
+.env.production
+.env.production.local
+.env.enterprise
+.env.enterprise.local
+
+# Additional environment files
+.env.*.local
+*.env
+.envrc
+
+# Secret files and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+secrets/
+credentials/
+private/
+ssl/
+certs/
+
+# Database files with potentially sensitive data
+*.db
+*.sqlite
+*.sqlite3
+*.sql.gz
+
+# Configuration files with secrets
+config/production.json
+config/secrets.json
+aws.json
+gcp.json
+azure.json
+
+# API keys and authentication files
+api-keys.txt
+tokens.txt
+auth.json
+service-account.json
+google-credentials.json
+
+# Backup files that might contain sensitive data
+*.backup
+*.bak
+*.old
+*.orig
+
+# Logs that might contain sensitive information
+*.log
+logs/
+access.log
+error.log
+audit.log
+
+# IDE files that might contain API keys
+.vscode/settings.json
+.idea/workspace.xml
+*.sublime-workspace
+
+# Cloud provider credential files
+.aws/
+.gcloud/
+.azure/
+.aws/credentials
+.gcloud/application_default_credentials.json
+
+# Vercel
+.vercel
+
+# Turbo
+.turbo
+
+# Cache
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Misc
+.DS_Store
+*.pem
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+Thumbs.db
+desktop.ini
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# AI Assistant files
+.claude/

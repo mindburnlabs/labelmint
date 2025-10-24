@@ -1,0 +1,46 @@
+name = "labelmint-edge-worker"
+main = "workers/edge-worker.js"
+compatibility_date = "2023-10-30"
+
+[env.production]
+name = "labelmint-edge-worker-prod"
+workers_dev = false
+route = { pattern = "*.labelmint.it/*", zone_name = "labelmint.it" }
+
+[env.staging]
+name = "labelmint-edge-worker-staging"
+workers_dev = true
+route = { pattern = "staging.labelmint.it/*", zone_name = "labelmint.it" }
+
+# KV Namespaces for caching
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id"
+
+# D1 Database for analytics
+[[d1_databases]]
+binding = "ANALYTICS_DB"
+database_name = "labelmint-analytics"
+database_id = "your-d1-database-id"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "production"
+API_HOST = "api.labelmint.it"
+WEB_HOST = "labelmint.it"
+CDN_HOST = "cdn.labelmint.it"
+ALLOWED_ORIGINS = "https://labelmint.it,https://www.labelmint.it"
+SECURITY_HEADER_ENABLED = "true"
+ANALYTICS_ENABLED = "true"
+
+# Staging variables
+[env.staging.vars]
+ENVIRONMENT = "staging"
+API_HOST = "api-staging.labelmint.it"
+WEB_HOST = "staging.labelmint.it"
+ALLOWED_ORIGINS = "https://staging.labelmint.it"
+
+# Limits and quotas
+[limits]
+cpu_ms = 50000

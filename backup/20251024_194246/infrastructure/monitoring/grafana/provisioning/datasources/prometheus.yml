@@ -1,0 +1,99 @@
+# Unified Prometheus Datasource Configuration for Grafana
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s
+      queryTimeout: 60s
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - datasourceUid: tempo
+          name: trace_id
+    secureJsonData: {}
+
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      httpMethod: GET
+      tracesToLogs:
+        datasourceUid: loki
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [
+          { key: 'service.name', value: 'service' }
+        ]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags: [{ key: 'service.name', value: 'service' }]
+        queries:
+          - name: 'Sample Rate'
+            query: 'rate(span_metrics_latency_sum{$$__tags}[5m])'
+          - name: 'Error Rate'
+            query: 'rate(span_metrics_latency_count{$$__tags, status="error"}[5m])'
+      serviceMap:
+        datasourceUid: prometheus
+        enabled: true
+      search:
+        hide: false
+        filters:
+          - type: span
+            tag: service.name
+            value: '.*'
+            operator: =~
+    secureJsonData: {}
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+          urlDisplayLabel: "View Trace"
+    secureJsonData: {}
+
+  - name: LabelMint-Postgres
+    type: prometheus
+    access: proxy
+    url: http://postgres-exporter:9187
+    editable: true
+    jsonData:
+      timeInterval: 30s
+    secureJsonData: {}
+
+  - name: LabelMint-Redis
+    type: prometheus
+    access: proxy
+    url: http://redis-exporter:9121
+    editable: true
+    jsonData:
+      timeInterval: 30s
+    secureJsonData: {}
+
+  - name: LabelMint-Nginx
+    type: prometheus
+    access: proxy
+    url: http://nginx:9113
+    editable: true
+    jsonData:
+      timeInterval: 30s
+    secureJsonData: {}

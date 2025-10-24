@@ -1,0 +1,44 @@
+{
+  "extends": "../../config/shared/tsconfig.app.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/pages/*": ["./src/pages/*"],
+      "@/styles/*": ["./src/styles/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/assets/*": ["./src/assets/*"],
+      "@/config/*": ["./src/config/*"],
+      "@/api/*": ["./src/api/*"],
+      "@/store/*": ["./src/store/*"],
+      "@/contexts/*": ["./src/contexts/*"],
+      "@/constants/*": ["./src/constants/*"],
+      "@labelmint/shared/*": ["../../packages/shared/*"],
+      "@labelmint/ui/*": ["../../packages/ui/*"],
+      "@labelmint/types": ["../../packages/shared/types"],
+      "@labelmint/utils": ["../../packages/shared/utils"],
+      "@labelmint/validation": ["../../packages/shared/validation"],
+      "@labelmint/database": ["../../packages/shared/database"],
+      "@labelmint/auth": ["../../packages/shared/auth"],
+      "@labelmint/config": ["../../packages/shared/config"],
+      "@labelmint/api-client": ["../../packages/clients/api-client"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "coverage"
+  ]
+}

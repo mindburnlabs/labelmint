@@ -1,0 +1,145 @@
+# LabelMint Prometheus Configuration
+# ================================
+# This is the main Prometheus configuration that extends shared configurations
+
+# Import base configuration
+# Note: In production, these files would be mounted or combined
+# - ../config/shared/prometheus.base.yml
+# - ../config/shared/prometheus.jobs.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'labelmint'
+    environment: '${ENVIRONMENT:-development}'
+    region: '${AWS_REGION:-local}'
+    replica: '${PROMETHEUS_REPLICA:-1}'
+
+# Rule files
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+  - "/etc/prometheus/alert_rules/*.yml"
+  - "./alert_rules/*.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+    - timeout: 10s
+    - api_version: v2
+
+# Remote write configuration (optional - for long-term storage)
+# remote_write:
+#   - url: "http://cortex:9009/api/v1/push"
+#     basic_auth:
+#       username: ${CORTEX_USERNAME}
+#       password: ${CORTEX_PASSWORD}
+#     queue_config:
+#       max_samples_per_send: 1000
+#       max_shards: 200
+#       capacity: 2500
+
+# Service discovery configurations
+scrape_configs:
+  # Kubernetes service discovery (if using K8s)
+  # - job_name: 'kubernetes-apiservers'
+  #   kubernetes_sd_configs:
+  #   - role: endpoints
+  #   scheme: https
+  #   tls_config:
+  #     ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  #   bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  #   relabel_configs:
+  #   - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+  #     action: keep
+  #     regex: default;kubernetes;https
+
+  # Kubernetes pods
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #   - role: pod
+  #   relabel_configs:
+  #   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #     action: keep
+  #     regex: true
+  #   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #     action: replace
+  #     target_label: __metrics_path__
+  #     regex: (.+)
+  #   - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+  #     action: replace
+  #     regex: ([^:]+)(?::\d+)?;(\d+)
+  #     replacement: $1:$2
+  #     target_label: __address__
+  #   - action: labelmap
+  #     regex: __meta_kubernetes_pod_label_(.+)
+  #   - source_labels: [__meta_kubernetes_namespace]
+  #     action: replace
+  #     target_label: kubernetes_namespace
+  #   - source_labels: [__meta_kubernetes_pod_name]
+  #     action: replace
+  #     target_label: kubernetes_pod_name
+
+  # Local development targets (override shared config for local env)
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 30s
+
+  # Application services (local development)
+  - job_name: 'labelmint-web'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+    scrape_interval: 15s
+    metrics_path: /api/metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-admin'
+    static_configs:
+      - targets: ['host.docker.internal:3001']
+    scrape_interval: 15s
+    metrics_path: /api/metrics
+
+  - job_name: 'labelmint-api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:3002']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'labelmint-labeling-backend'
+    static_configs:
+      - targets: ['host.docker.internal:3003']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  - job_name: 'labelmint-payment-backend'
+    static_configs:
+      - targets: ['host.docker.internal:3004']
+    scrape_interval: 15s
+    metrics_path: /metrics
+
+  # Database exporters
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['localhost:9187']
+    scrape_interval: 30s
+
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['localhost:9121']
+    scrape_interval: 30s
+
+  # Infrastructure exporters
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['localhost:3005']
+    scrape_interval: 30s
+    metrics_path: /metrics

@@ -1,0 +1,159 @@
+# LabelMint Service Jobs Configuration
+# ===================================
+# This file contains job definitions for all LabelMint services
+
+# Core infrastructure jobs
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Node Exporter for system metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # cAdvisor for container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Application Services
+  - job_name: 'labelmint-web'
+    static_configs:
+      - targets: ['web:3002']
+    scrape_interval: 15s
+    metrics_path: /api/metrics
+    scrape_timeout: 10s
+    basic_auth:
+      username: ${METRICS_USER}
+      password: ${METRICS_PASSWORD}
+
+  - job_name: 'labelmint-admin'
+    static_configs:
+      - targets: ['admin:3004']
+    scrape_interval: 15s
+    metrics_path: /api/metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-api-gateway'
+    static_configs:
+      - targets: ['api-gateway:3002']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-labeling-backend'
+    static_configs:
+      - targets: ['labeling-backend:3001']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-payment-backend'
+    static_configs:
+      - targets: ['payment-backend:3003']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-telegram-bot'
+    static_configs:
+      - targets: ['telegram-bot:3010']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'labelmint-worker-bot'
+    static_configs:
+      - targets: ['worker-bot:3011']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  # Database and Storage Exporters
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'supabase-exporter'
+    static_configs:
+      - targets: ['supabase-exporter:9188']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Infrastructure Services
+  - job_name: 'nginx-exporter'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'minio-exporter'
+    static_configs:
+      - targets: ['minio:9000']
+    scrape_interval: 30s
+    metrics_path: /minio/v2/metrics/cluster
+    basic_auth:
+      username: ${MINIO_ACCESS_KEY}
+      password: ${MINIO_SECRET_KEY}
+
+  # Monitoring Stack
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'tempo'
+    static_configs:
+      - targets: ['tempo:3200']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  - job_name: 'vector'
+    static_configs:
+      - targets: ['vector:8686']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # External Services Monitoring
+  - job_name: 'external-apis'
+    static_configs:
+      - targets: ['blackbox-exporter:9115']
+    scrape_interval: 60s
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://api.labelmint.it/health
+        - https://labelmint.it/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

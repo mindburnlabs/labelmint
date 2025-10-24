@@ -1,0 +1,49 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# Required Variables
+environment = "staging" # or "production"
+app_image = "your-registry/deligateit:latest"
+domain_name = "deligateit.com"
+ssl_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+alert_email = "alerts@deligateit.com"
+
+# Database
+db_password = "your-secure-db-password"
+
+# Redis
+redis_auth_token = "your-secure-redis-token"
+
+# Secrets
+jwt_secret = "your-jwt-secret-key"
+openai_api_key = "your-openai-api-key"
+stripe_secret_key = "sk_test_your-stripe-secret-key"
+
+# Optional Variables
+aws_region = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+vpc_cidr = "10.0.0.0/16"
+
+task_cpu = 1024
+task_memory = 2048
+desired_count = 2
+min_capacity = 1
+max_capacity = 10
+
+db_instance_class = "db.t4g.medium"
+db_read_replica_instance_class = "db.t4g.medium"
+db_allocated_storage = 100
+db_max_allocated_storage = 1000
+
+redis_node_type = "cache.t4g.micro"
+redis_num_nodes = 2
+redis_engine_version = "7.0"
+
+route53_zone_id = "Z1D633PEXAMPLE" # Required if using Route53 for DNS validation
+
+# Security
+enable_shield_advanced = false
+waf_whitelist_ips = [] # Add IPs to whitelist if needed
+
+# Application AWS Keys (optional if using instance roles)
+aws_access_key_id = ""
+aws_secret_access_key = ""

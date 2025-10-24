@@ -1,0 +1,99 @@
+# Multi-stage Dockerfile for Web Application with Security Best Practices
+# ================================================================
+
+# Build stage for dependencies
+FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat ca-certificates tzdata
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@9.15.1
+
+# Copy package files
+COPY package.json pnpm-lock.yaml* ./
+COPY packages/web/package.json ./packages/web/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/shared/package.json ./packages/shared/
+
+# Install dependencies with frozen lockfile
+RUN pnpm install --frozen-lockfile --prefer-frozen-lockfile
+
+# Builder stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@9.15.1
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/web/node_modules ./packages/web/node_modules
+COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+
+# Copy source code
+COPY . .
+
+# Build arguments for version tracking
+ARG NEXT_PUBLIC_APP_VERSION
+ARG NEXT_PUBLIC_BUILD_DATE
+ARG NEXT_PUBLIC_COMMIT_BRANCH
+
+# Environment variables for build
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-unknown}
+ENV NEXT_PUBLIC_BUILD_DATE=${NEXT_PUBLIC_BUILD_DATE:-unknown}
+ENV NEXT_PUBLIC_COMMIT_BRANCH=${NEXT_PUBLIC_COMMIT_BRANCH:-unknown}
+
+# Build the application
+RUN pnpm run build:web
+
+# Production runner stage
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    tzdata \
+    dumb-init \
+    && rm -rf /var/cache/apk/*
+
+# Create non-root user with proper UID/GID
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --gid 1001 nodejs
+
+# Install pnpm globally (for potential runtime operations)
+RUN npm install -g pnpm@9.15.1
+
+# Copy built application with correct permissions
+COPY --from=builder --chown=nodejs:nodejs /app/packages/web/public ./public
+COPY --from=builder --chown=nodejs:nodejs /app/packages/web/.next/standalone ./
+COPY --from=builder --chown=nodejs:nodejs /app/packages/web/.next/static ./.next/static
+
+# Copy package.json for runtime dependencies
+COPY --from=builder --chown=nodejs:nodejs /app/packages/web/package.json ./package.json
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3002
+ENV HOSTNAME=0.0.0.0
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 3002
+
+# Health check with proper timeout and retries
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3002/api/health || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start the application
+CMD ["node", "server.js"]

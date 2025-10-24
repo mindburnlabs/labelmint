@@ -1,0 +1,27 @@
+{
+  "name": "@labelmint/bots",
+  "version": "1.0.0",
+  "description": "LabelMint Telegram Bots Package",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:client": "cd client-bot && npm run dev",
+    "dev:worker": "cd worker-bot && npm run dev",
+    "build:client": "cd client-bot && npm run build",
+    "build:worker": "cd worker-bot && npm run build",
+    "start:client": "cd client-bot && npm start",
+    "start:worker": "cd worker-bot && npm start",
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:worker\"",
+    "build": "npm run build:client && npm run build:worker",
+    "start": "npm run start:client & npm run start:worker",
+    "install:all": "npm install && cd client-bot && npm install && cd ../worker-bot && npm install",
+    "clean": "cd client-bot && npm run clean && cd ../worker-bot && npm run clean"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "workspaces": [
+    "client-bot",
+    "worker-bot"
+  ]
+}

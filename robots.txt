@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://labelmint.it/sitemap.xml

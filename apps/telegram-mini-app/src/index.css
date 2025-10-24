@@ -1,0 +1,5 @@
+/* DEPRECATED: This CSS file has been consolidated into the unified design system. */
+/* Please import from '@labelmint/ui/styles/globals.css' instead. */
+/* This file will be removed in a future version. */
+
+@import '@labelmint/ui/styles/globals.css';

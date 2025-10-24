@@ -1,0 +1,24 @@
+apiVersion: 1
+
+providers:
+  # Import dashboards from local directory
+  - name: 'DeligateIT Dashboards'
+    orgId: 1
+    folder: 'DeligateIT'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+
+  # Import from external sources
+  - name: 'default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/external

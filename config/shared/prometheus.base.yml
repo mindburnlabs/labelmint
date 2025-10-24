@@ -1,0 +1,46 @@
+# LabelMint Base Prometheus Configuration
+# =====================================
+# This file contains shared Prometheus configuration for all LabelMint services
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'labelmint'
+    environment: '${ENVIRONMENT:-development}'
+    region: '${AWS_REGION:-local}'
+    service: '${SERVICE_NAME:-unknown}'
+
+# Rule files
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+  - "/etc/prometheus/alert_rules/*.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+    - timeout: 10s
+    - api_version: v2
+
+# Remote write configuration (for long-term storage)
+# remote_write:
+#   - url: "http://cortex:9009/api/v1/push"
+#     basic_auth:
+#       username: ${CORTEX_USERNAME}
+#       password: ${CORTEX_PASSWORD}
+
+# Common job configuration template
+templates:
+  - job_name: 'labelmint-service-template'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+    honor_labels: true
+    honor_timestamps: true
+    basic_auth:
+      username: ${METRICS_USER:-""}
+      password: ${METRICS_PASSWORD:-""}
+    static_configs: []

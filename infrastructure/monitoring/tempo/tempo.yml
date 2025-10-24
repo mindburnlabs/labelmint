@@ -1,0 +1,161 @@
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  http_server_read_timeout: 30s
+  http_server_write_timeout: 30s
+  grpc_server_max_recv_msg_size: 4194304
+  grpc_server_max_send_msg_size: 4194304
+  http_server_read_header_timeout: 10s
+  log_level: info
+  log_format: logfmt
+  grpc_server_max_concurrent_streams: 1000
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    jaeger:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:14250
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+    zipkin:
+      endpoint: 0.0.0.0:9411
+  receiver_handover_timeout: 30s
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1048576
+  max_block_duration: 5m
+  flush_check_period: 1s
+  flush_block_timeout: 5m
+  spans_per_block: 1000
+  recent_cache:
+    ttl: 15m
+    size_mb: 100
+    write_buffer_size_mb: 20
+  wal:
+    enabled: true
+    dir: /var/tempo/wal
+    seg_size_mb: 100
+    max_backups: 20
+    sync_period: 1s
+
+metrics_generator:
+  processor:
+    service_graphs:
+      enabled: true
+      max_items: 10000
+      store: ttl
+      ttl: 120h
+    span_metrics:
+      enabled: true
+      dimensions:
+        - service.name
+        - service.namespace
+        - service.instance.id
+        - span.kind
+        - span.name
+        - status.code
+    local_blocks:
+      enabled: true
+  registry:
+    external_labels:
+      cluster: labelmint-prod
+      namespace: labelmint
+  storage:
+    path: /var/tempo/generator
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+    wal:
+      dir: /var/tempo/generator/wal
+
+overrides:
+  per_tenant_override_config: /var/tempo/overrides.yaml
+
+storage:
+  trace:
+    backend: local
+    block:
+      v2_encoding: zstd
+      version: v2
+      bloom_filter_false_positive: 0.05
+      index_downsample_bytes: 1000
+      encoding: zstd
+    wal:
+      encoding: snappy
+      path: /var/tempo/wal
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+    local:
+      path: /var/tempo/blocks
+    gcs:
+      bucket: tempo-traces
+      chunk_buffer_size: 2097152
+      request_timeout: 30s
+      enable_opentelemetry: true
+    s3:
+      bucket: tempo-traces
+      endpoint: s3.amazonaws.com
+      region: us-west-2
+      access_key_id: ${S3_ACCESS_KEY_ID}
+      secret_access_key: ${S3_SECRET_ACCESS_KEY}
+      force_path_style: false
+      insecure: false
+      chunk_buffer_size: 2097152
+      request_timeout: 30s
+
+compactor:
+  compaction:
+    compaction_window: 24h
+    chunk_size_bytes: 5242880
+    max_block_bytes: 1073741824
+    block_retention: 48h
+    compacted_block_retention: 48h
+    iterator_error_reset_time: 5m
+    iterate_error_retry_delay: 30s
+    compacted_block_retention: 1h
+    retention_concurrency: 10
+  ring:
+    kvstore:
+      store: memberlist
+    instance_addr: 127.0.0.1
+  frontend_worker:
+    frontend_address: 127.0.0.1:3200
+    grpc_client_config:
+      max_send_msg_size: 10485760
+      use_gzip_compression: true
+
+query_frontend:
+  search:
+    external_backend: elasticsearch
+    external_endpoints:
+      - http://elasticsearch:9200
+    external_prefix: traces-
+    read_timeout: 30s
+    write_timeout: 30s
+    query_timeout: 2m
+    index_prefix: traces
+    max_duration: 0s
+    max_start_offset: 0
+    tags_size_limit_bytes: 262144
+    number_of_shards: 3
+    number_of_replicas: 1
+    bulk_max_age: 1m
+    bulk_action_size: 5000000
+    bulk_worker_count: 4
+    bulk_flush_size: 5000000
+    max_look_back: 720h
+    trace_idle_period: 10s
+    total_sigfigs: 6
+    cache_entries_limit: 100000
+
+auth_enabled: false
+use_local_span_metrics: true

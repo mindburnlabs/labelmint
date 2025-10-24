@@ -1,0 +1,40 @@
+{
+  "name": "@labelmint/telegram-mini-app",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@twa-dev/sdk": "^7.10.1",
+    "@telegram-apps/sdk-react": "^2.0.18",
+    "@telegram-apps/telegram-ui": "^2.1.8",
+    "axios": "^1.7.9",
+    "react-router-dom": "^6.29.2",
+    "konva": "^9.3.6",
+    "react-konva": "^18.2.10",
+    "tesseract.js": "^5.1.1",
+    "dompurify": "^3.0.8",
+    "@types/dompurify": "^3.0.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.22",
+    "globals": "^16.4.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.45.0",
+    "vite": "^7.1.7"
+  }
+}

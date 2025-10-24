@@ -1,0 +1,507 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                String    @id @default(cuid())
+  name              String
+  slug              String    @unique
+  domain            String?   @unique
+  logo              String?
+  settings          Json      @default("{}")
+  subscriptionPlan  SubscriptionPlan @default(TRIAL)
+  billingEmail      String
+  billingAddress    Json?
+  credits           Decimal    @default(0)
+  maxUsers          Int        @default(50)
+  maxProjects       Int        @default(100)
+  maxStorageMb      Int        @default(10240) // 10GB
+  ssoConfig         Json?     @default("{}")
+  customConfig       Json?      @default("{}")
+  isActive          Boolean    @default(true)
+  isVerified        Boolean    @default(false)
+  trialEndsAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  teams             Team[]
+  users             OrganizationUser[]
+  projects          Project[]
+  workflows         Workflow[]
+  auditLogs         AuditLog[]
+  apiKeys           ApiKey[]
+  billingInvoices   BillingInvoice[]
+  subscriptions     Subscription[]
+  complianceReports ComplianceReport[]
+  tags              Tag[]
+
+  @@map("organizations")
+}
+
+model Team {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  leadUserId     String
+  settings       Json     @default("{}")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  lead           User          @relation("TeamLead", fields: [leadUserId], references: [id])
+  members         TeamMember[]
+  projects        Project[]
+
+  @@unique([organizationId, name])
+  @@map("teams")
+}
+
+model TeamMember {
+  id         String    @id @default(cuid())
+  teamId     String
+  userId     String
+  role       TeamRole  @default(MEMBER)
+  joinedAt   DateTime  @default(now())
+  isActive   Boolean   @default(true)
+
+  // Relations
+  team       Team @relation(fields: [teamId], references: [id])
+  user       User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model OrganizationUser {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole    @default(MEMBER)
+  permissions    Json       @default("{}")
+  lastLoginAt    DateTime?
+  isActive       Boolean    @default(true)
+  invitedBy      String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+  invitedByUser  User?        @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@unique([organizationId, userId])
+  @@map("organization_users")
+}
+
+model Workflow {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  definition      Json     // Visual workflow definition
+  version         Int      @default(1)
+  isActive        Boolean  @default(true)
+  isPublic        Boolean  @default(false)
+  category        String?
+  tags            String[]
+  stats           Json     @default("{}") // Execution statistics
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  creator        User         @relation(fields: [createdBy], references: [id])
+  executions     WorkflowExecution[]
+  templates      WorkflowTemplate[]
+  schedules      WorkflowSchedule[]
+
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id             String           @id @default(cuid())
+  workflowId     String
+  organizationId String
+  triggeredBy     String?
+  triggeredByType TriggerType    @default(MANUAL)
+  status         ExecutionStatus   @default(PENDING)
+  input           Json?
+  output          Json?
+  logs           Json?            @default("[]")
+  error           String?
+  startTime       DateTime         @default(now())
+  endTime         DateTime?
+  duration        Int?            // in milliseconds
+  nodeId          String?          // Current node being executed
+  context         Json             @default("{}") // Execution context
+
+  // Relations
+  workflow       Workflow @relation(fields: [workflowId], references: [id])
+  tasks          WorkflowTask[]
+  notifications  Notification[]
+
+  @@map("workflow_executions")
+}
+
+model WorkflowSchedule {
+  id             String           @id @default(cuid())
+  workflowId     String
+  name           String
+  scheduleType   ScheduleType    @default(RECURRING)
+  cronExpression String?
+  timezone       String           @default("UTC")
+  isActive       Boolean          @default(true)
+  lastRunAt      DateTime?
+  nextRunAt      DateTime
+  runCount       Int              @default(0)
+  settings       Json             @default("{}")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  workflow       Workflow @relation(fields: [workflowId], references: [id])
+
+  @@map("workflow_schedules")
+}
+
+model WorkflowTask {
+  id               String              @id @default(cuid())
+  executionId       String
+  nodeId            String
+  nodeType          WorkflowNodeType
+  status            String              @default(PENDING)
+  input             Json?
+  output            Json?
+  error             String?
+  startTime         DateTime            @default(now())
+  endTime           DateTime?
+  duration          Int?                // in milliseconds
+  dependencies      String[]            @default([])
+  metadata         Json?               @default("{}")
+
+  // Relations
+  execution        WorkflowExecution    @relation(fields: [executionId], references: [id])
+
+  @@map("workflow_tasks")
+}
+
+model WorkflowTemplate {
+  id             String   @id @default(cuid())
+  workflowId     String
+  name           String
+  description    String?
+  category       String
+  tags           String[]
+  isPublic       Boolean  @default(false)
+  usageCount     Int      @default(0)
+  rating         Decimal  @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  workflow       Workflow @relation(fields: [workflowId], references: [id])
+
+  @@map("workflow_templates")
+}
+
+model ApiKey {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  key            String   @unique
+  permissions    Json     @default("{}")
+  rateLimit       Int?     @default(1000) // requests per hour
+  lastUsedAt     DateTime?
+  isActive       Boolean  @default(true)
+  expiresAt       DateTime?
+  createdBy       String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  creator        User          @relation(fields: [createdBy], references: [id])
+
+  @@map("api_keys")
+}
+
+model AuditLog {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String?
+  resourceType   String
+  resourceId     String
+  action         String
+  details        Json?     @default("{}")
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime   @default(now())
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model ComplianceReport {
+  id             String   @id @default(cuid())
+  organizationId String
+  reportType     ReportType
+  title          String
+  description    String?
+  status         String    @default(PENDING)
+  content        Json?
+  generatedAt    DateTime @default(now())
+  expiresAt      DateTime?
+  createdBy      String
+  approvedAt     DateTime?
+  approvedBy     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("compliance_reports")
+}
+
+model BillingInvoice {
+  id             String   @id @default(cuid())
+  organizationId String
+  invoiceNumber  String   @unique
+  amount         Decimal
+  currency       String   @default("USD")
+  status         InvoiceStatus @default(DRAFT)
+  dueDate        DateTime
+  paidDate       DateTime?
+  items          Json[]    @default("[]")
+  metadata       Json?     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("billing_invoices")
+}
+
+model Subscription {
+  id             String        @id @default(cuid())
+  organizationId String
+  plan           SubscriptionPlan
+  status         SubscriptionStatus @default(ACTIVE)
+  startDate      DateTime      @default(now())
+  endDate        DateTime?
+  cancelAt       DateTime?
+  trialEndsAt    DateTime?
+  features       Json          @default("{}")
+  billingCycle   BillingCycle  @default(MONTHLY)
+  price          Decimal
+  currency       String        @default("USD")
+  paymentMethod   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Notification {
+  id             String         @id @default(cuid())
+  organizationId String
+  userId         String?
+  workflowExecId String?
+  type           NotificationType
+  title          String
+  message        String
+  data           Json?          @default("{}")
+  isRead         Boolean        @default(false)
+  priority       NotificationPriority @default(NORMAL)
+  channels       String[]       @default(["in_app"])
+  sentAt         DateTime?      @default(now())
+  createdAt      DateTime       @default(now())
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  execution      WorkflowExecution? @relation(fields: [workflowExecId], references: [id])
+
+  @@map("notifications")
+}
+
+model Tag {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String?
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, name])
+  @@map("tags")
+}
+
+// Enums
+enum SubscriptionPlan {
+  TRIAL
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TeamRole {
+  LEAD
+  MANAGER
+  MEMBER
+}
+
+enum WorkflowNodeType {
+  TRIGGER
+  TASK
+  VALIDATION
+  NOTIFICATION
+  INTEGRATION
+  CONDITION
+  ACTION
+}
+
+enum TriggerType {
+  MANUAL
+  SCHEDULED
+  WEBHOOK
+  EVENT
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  PAUSED
+}
+
+enum ScheduleType {
+  RECURRING
+  ONCE
+  CONDITIONAL
+}
+
+enum ReportType {
+  AUD_LOGS
+  DATA_RETENTION
+  ACCESS_CONTROL
+  COMPLIANCE_SUMMARY
+  SECURITY_REPORT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  SUSPENDED
+  TRIAL
+  EXPIRED
+}
+
+enum NotificationType {
+  WORKFLOW_STARTED
+  WORKFLOW_COMPLETED
+  WORKFLOW_FAILED
+  TASK_ASSIGNED
+  TASK_COMPLETED
+  APPROVAL_NEEDED
+  SYSTEM_ALERT
+  BILLING_NOTIFICATION
+  SECURITY_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+// Additional project-related models for enterprise features
+model Project {
+  id                 String     @id @default(cuid())
+  organizationId     String
+  teamId             String?
+  name               String
+  description        String?
+  settings           Json       @default("{}")
+  workflowDefinition Json?
+  isPrivate          Boolean    @default(false)
+  archivedAt         DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // Relations
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  team           Team         @relation(fields: [teamId], references: [id])
+
+  @@map("projects")
+}
+
+// Extended User model for enterprise features
+model User {
+  id        String    @id @default(cuid())
+  telegramId Int       @unique
+  email     String?   @unique
+  firstName String
+  lastName  String
+  username  String?   @unique
+  avatar    String?
+  settings  Json      @default("{}")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  ownedOrganizations Organization[] @relation("OrganizationOwner")
+  organizations      OrganizationUser[]
+  teams              TeamMember[] @relation("TeamMember")
+  ledTeams         Team[] @relation("TeamLead")
+  apiKeys          ApiKey[]
+  workflows        Workflow[]
+  invitedUsers     OrganizationUser[] @relation("InvitedBy")
+
+  @@map("users")
+}

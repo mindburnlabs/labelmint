@@ -1,0 +1,293 @@
+name: Production Deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_ENV: production
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Run linting
+        run: |
+          npm run lint
+
+      - name: Run type checking
+        run: |
+          npm run type-check
+
+      - name: Run unit tests
+        run: |
+          npm run test:unit
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        run: |
+          supabase start
+        env:
+          SUPABASE_DB_PASSWORD: postgres
+          POSTGRES_PASSWORD: postgres
+
+      - name: Run integration tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:54322/postgres
+          TEST_REDIS_URL: redis://localhost:6379
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          npm run test:integration
+
+      - name: Stop Supabase
+        if: always()
+        run: |
+          supabase stop
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node-scan@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level high
+
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v20
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Build application
+        run: |
+          npm run build
+
+      - name: Build Docker image
+        run: |
+          docker build -t $IMAGE_NAME:${{ github.sha }} .
+          docker tag $IMAGE_NAME:${{ github.sha }} latest
+
+      - name: Log in to registry
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push Docker image
+        run: |
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase Project
+        run: |
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Push Database Migrations
+        run: |
+          # Generate any new migrations
+          supabase db diff --use-migra --schema public > new_migration.sql || echo "No schema changes"
+
+          # If there are changes, push them
+          if [ -s new_migration.sql ]; then
+            echo "Database changes detected, pushing to production..."
+            supabase db push
+          else
+            echo "No database changes to push"
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy to Production
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /var/www/labelmint
+
+            # Update database connection to use Supabase
+            export DATABASE_URL=${{ secrets.SUPABASE_DB_URL }}
+
+            # Pull latest image
+            docker pull $IMAGE_NAME:latest
+
+            # Stop old containers
+            docker-compose down
+
+            # Start new containers with Supabase connection
+            IMAGE_NAME=$IMAGE_NAME:${{ github.sha }} \
+            DATABASE_URL=${{ secrets.SUPABASE_DB_URL }} \
+            SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }} \
+            docker-compose up -d
+
+            # Wait for health check
+            sleep 30
+
+            # Verify deployment
+            if curl -f http://localhost:3000/health; then
+              echo "✅ Deployment successful!"
+            else
+              echo "❌ Deployment failed!"
+              exit 1
+            fi
+
+      - name: Run smoke tests
+        run: |
+          sleep 60
+          curl -f https://labelmint.it/api/health || exit 1
+          curl -f https://labelmint.it/api/v1 || exit 1
+
+  rollback:
+    name: Rollback on failure
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: failure()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Rollback deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /var/www/labelmint
+
+            # Get previous successful image tag
+            PREVIOUS_TAG=$(docker images --format "table {{.Repository}}" | grep latest | awk '{print $2}' | head -1)
+
+            # Rollback to previous version
+            IMAGE_NAME=$IMAGE_NAME:$PREVIOUS_TAG docker-compose up -d
+
+            echo "🚨 Rolled back to previous version: $PREVIOUS_TAG"
+
+  notify:
+    name: Notify deployment status
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: ${{ secrets.SLACK_CHANNEL }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          text: |
+            Deployment ${{ job.status }}: ${{ github.ref }} (${{ github.sha }})
+            ${{ job.status === 'success' && '✅' || '❌' }}
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: 587
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "Deployment ${{ job.status === 'success' && 'Succeeded' || 'Failed' }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          body: |
+            Deployment ${{ job.status === 'success' && 'succeeded' || 'failed' }}
+
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref }}
+
+            ${{ job.status === 'success' && 'The new version is now live at https://labelmint.it' || 'A rollback was initiated. Please check the system status.' }}
+
+  health-check:
+    name: Post-deployment health check
+    runs-on: ubuntu-latest
+    needs: build-and-deploy
+    if: success()
+    steps:
+      - name: Wait for application to be ready
+        run: |
+          echo "Waiting for application to be fully ready..."
+          sleep 120
+
+      - name: Comprehensive health check
+        run: |
+          # Application health
+          APP_HEALTH=$(curl -s https://labelmint.it/health | jq -r .status)
+          echo "Application Health: $APP_HEALTH"
+
+          # API health
+          API_HEALTH=$(curl -s https://labelmint.it/api/health | jq -r .status)
+          echo "API Health: $API_HEALTH"
+
+          # Database health
+          DB_HEALTH=$(curl -s https://labelmint.it/api/health/db | jq -r .database)
+          echo "Database Health: $DB_HEALTH"
+
+          # Redis health
+          REDIS_HEALTH=$(curl -s https://labelmint.it/api/health/redis | jq -r .redis)
+          echo "Redis Health: $REDIS_HEALTH"
+
+          # WebSocket health
+          WS_HEALTH=$(curl -s https://labelmint.it/api/health/websocket | jq -r .websocket)
+          echo "WebSocket Health: $WS_HEALTH"
+
+          if [[ "$APP_HEALTH" == "OK" && "$API_HEALTH" == "OK" ]]; then
+            echo "✅ All health checks passed"
+          else
+            echo "❌ Health checks failed"
+            exit 1
+          fi

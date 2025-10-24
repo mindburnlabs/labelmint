@@ -1,0 +1,6 @@
+# pgBouncer user authentication
+# Format: username "password"
+postgres "${DB_PASSWORD}"
+stats "${STATS_PASSWORD:-stats_password}"
+replicator "${REPLICATOR_PASSWORD}"
+readonly "${READONLY_PASSWORD}"

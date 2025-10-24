@@ -1,0 +1,267 @@
+version: '3.8'
+
+services:
+  # Security Events Collector
+  security-events-collector:
+    image: grafana/grafana:10.0.0
+    container_name: security-events-collector
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel,grafana-clock-panel
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - security-monitoring
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:v2.40.0
+    container_name: security-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/rules:/etc/prometheus/rules
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - security-monitoring
+
+  # AlertManager for alerting
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    container_name: security-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./alertmanager/templates:/etc/alertmanager/templates
+      - alertmanager-data:/alertmanager
+    networks:
+      - security-monitoring
+
+  # Fail2Ban for intrusion detection
+  fail2ban:
+    image: crazymax/fail2ban:1.1.0
+    container_name: security-fail2ban
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./fail2ban/jail.local:/etc/fail2ban/jail.local
+      - /var/log:/var/log:ro
+      - fail2ban-data:/data
+    environment:
+      - F2B_IPTABLES_CHAIN=INPUT
+      - F2B_DB_PURGE_AGE=30d
+      - TZ=UTC
+
+  # OSSEC for host intrusion detection
+  ossec-server:
+    image: ossec/ossec-hids:3.6.0
+    container_name: security-ossec
+    restart: unless-stopped
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515/udp"
+      - "5140:5140/udp"
+    volumes:
+      - ./ossec/ossec.conf:/var/ossec/etc/ossec.conf
+      - ./ossec/local_rules.xml:/var/ossec/rules/local_rules.xml
+      - ossec-data:/var/ossec
+      - /var/log:/var/log:ro
+    environment:
+      - OSSEC_USER=root
+      - OSSEC_GROUP=root
+    networks:
+      - security-monitoring
+
+  # Wazuh for SIEM capabilities
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.4.5
+    container_name: security-wazuh-manager
+    restart: unless-stopped
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "5140:5140"
+      - "55000:55000"
+    volumes:
+      - ./wazuh/etc/wazuh-manager:/var/ossec/etc
+      - wazuh-data:/var/ossec/data
+      - wazuh-logs:/var/ossec/logs
+    environment:
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - INDEXER_USERNAME=wazuh
+      - INDEXER_PASSWORD=wazuh
+      - FILEbeat_USERNAME=filebeat
+      - FILEBEAT_PASSWORD=filebeat
+    networks:
+      - security-monitoring
+
+  # Wazuh Indexer
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.4.5
+    container_name: security-wazuh-indexer
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_USERNAME=wazuh
+      - ELASTICSEARCH_PASSWORD=wazuh
+      - ELASTICSEARCH_CLUSTER_NAME=wazuh
+      - DISABLE_SECURITY_DOCKER=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - wazuh-indexer-data:/usr/share/elasticsearch/data
+      - ./wazuh/wazuh-cluster.yml:/usr/share/wazuh-indexer/wazuh-cluster.yml
+      - ./wazuh/wazuh-node.yml:/usr/share/wazuh-indexer/wazuh-node.yml
+    networks:
+      - security-monitoring
+
+  # Wazuh Dashboard
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.4.5
+    container_name: security-wazuh-dashboard
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    depends_on:
+      - wazuh-indexer
+    environment:
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - INDEXER_USERNAME=wazuh
+      - INDEXER_PASSWORD=wazuh
+      - DASHBOARD_USERNAME=wazuh
+      - DASHBOARD_PASSWORD=wazuh
+      - API_USERNAME=wazuh
+      - API_PASSWORD=wazuh
+    volumes:
+      - ./wazuh/dashboard.yml:/usr/share/wazuh-dashboard/config/dashboard.yml
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/config
+    networks:
+      - security-monitoring
+
+  # CrowdSec for behavioral detection
+  crowdsec:
+    image: crowdsecurity/crowdsec:1.4.1
+    container_name: security-crowdsec
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - GID=1000
+      - COLLECTIONS=linux,cloud-providers
+      - BOUNCING=enabled
+    volumes:
+      - crowdsec-data:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+      - /var/log:/var/log:ro
+    networks:
+      - security-monitoring
+
+  # Security Events Forwarder
+  security-forwarder:
+    image: fluent/fluent-bit:2.1.0
+    container_name: security-forwarder
+    restart: unless-stopped
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./fluent-bit/parsers:/fluent-bit/etc/parsers.conf
+      - /var/log:/var/log:ro
+    environment:
+      - FLUENT_ELASTIC_HOST=elasticsearch
+      - FLUENT_ELASTIC_PORT=9200
+      - FLUENT_ELASTIC_USER=elastic
+      - FLUENT_ELASTIC_PASSWORD=changeme
+    networks:
+      - security-monitoring
+
+  # Security Metrics Exporter
+  security-metrics:
+    image: nginx/nginx:1.24
+    container_name: security-metrics
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx/metrics.conf:/etc/nginx/nginx.conf
+      - ./nginx/html:/usr/share/nginx/html
+    networks:
+      - security-monitoring
+
+  # VPN Gateway for secure access
+  wireguard-server:
+    image: linuxserver/wireguard:1.0.0
+    container_name: security-wireguard
+    restart: unless-stopped
+    ports:
+      - "51820:51820/udp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./wireguard/config:/config
+      - /lib/modules:/lib/modules:ro
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - SERVERURL=wireguard.domain.com
+      - PEERS=1
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0
+    networks:
+      - security-monitoring
+
+  # Rate Limiting Service
+  rate-limiter:
+    image: envoyproxy/envoy:v1.27.0
+    container_name: security-rate-limiter
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      - security-monitoring
+
+volumes:
+  grafana-data:
+  prometheus-data:
+  alertmanager-data:
+  fail2ban-data:
+  ossec-data:
+  wazuh-data:
+  wazuh-logs:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  crowdsec-data:
+  crowdsec-config:
+
+networks:
+  security-monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labelmintit
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    spec:
+      containers:
+      - name: labelmintit-app
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "warn"
+        - name: ENABLE_METRICS
+          value: "true"
+        - name: WORKER_CONCURRENCY
+          value: "10"
+      securityContext:
+        fsGroup: 2000
+        runAsUser: 1000
+        runAsGroup: 1000
+      nodeSelector:
+        node-type: application
+        workload: production
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "production"
+        effect: "NoSchedule"

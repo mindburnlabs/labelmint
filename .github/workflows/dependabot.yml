@@ -1,0 +1,57 @@
+# DependaBot configuration for automated dependency updates
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "ivan"
+    assignees:
+      - "ivan"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "npm"
+    groups:
+      # Group all patch and minor updates together
+      patch-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "version-update:semver-patch"
+      minor-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "version-update:semver-minor"
+      # Group dev dependencies
+      dev-dependencies:
+        dependency-type: "development"
+    ignore:
+      # Ignore major version updates for production dependencies
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+        dependency-type: "production"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "ivan"
+    assignees:
+      - "ivan"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"

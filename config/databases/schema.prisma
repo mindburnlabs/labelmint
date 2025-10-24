@@ -1,0 +1,902 @@
+// Unified Database Schema for LabelMint Platform
+// This schema consolidates all backends into a single coherent database
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// UNIFIED USER MANAGEMENT
+// ============================================================================
+
+model User {
+  id          String    @id @default(cuid())
+  telegramId  BigInt?   @unique @map("telegram_id")
+  email       String?   @unique
+  username    String?   @unique
+  firstName   String?   @map("first_name")
+  lastName    String?   @map("last_name")
+  languageCode String?  @map("language_code")
+  isActive    Boolean   @default(true) @map("is_active")
+  role        UserRole  @default(WORKER)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Payment fields
+  walletBalance    Decimal  @default(0) @map("wallet_balance") @db.Decimal(20, 6)
+  totalEarned      Decimal  @default(0) @map("total_earned") @db.Decimal(20, 6)
+  totalWithdrawn   Decimal  @default(0) @map("total_withdrawn") @db.Decimal(20, 6)
+  frozenBalance    Decimal  @default(0) @map("frozen_balance") @db.Decimal(20, 6)
+
+  // Performance fields
+  tasksCompleted   Int      @default(0) @map("tasks_completed")
+  accuracyRate     Decimal? @map("accuracy_rate") @db.Decimal(5, 2)
+  trustScore       Decimal  @default(1.00) @map("trust_score") @db.Decimal(3, 2)
+  suspicionScore   Decimal  @default(0) @map("suspicion_score") @db.Decimal(3, 2)
+
+  // Authentication fields
+  passwordHash     String?  @map("password_hash")
+  twoFactorSecret  String?  @map("two_factor_secret")
+  twoFactorEnabled Boolean  @default(false) @map("two_factor_enabled")
+  lastLoginAt      DateTime? @map("last_login_at")
+
+  // TON Blockchain fields
+  tonWalletAddress String?  @unique @map("ton_wallet_address")
+  tonWalletVersion String?  @map("ton_wallet_version")
+  tonWalletTestnet Boolean  @default(true) @map("ton_wallet_testnet")
+
+  // Gamification fields
+  level            Int      @default(1)
+  experiencePoints Int      @default(0) @map("experience_points")
+  currentStreak    Int      @default(0) @map("current_streak")
+  maxStreak        Int      @default(0) @map("max_streak")
+
+  // Relations
+  projects          Project[]
+  tasks             Task[]          @relation("AssignedTasks")
+  responses         Response[]
+  wallet            Wallet?
+  transactions      Transaction[]
+  withdrawals       Withdrawal[]
+  clientPayments    ClientPayment[]
+  workerTransactions WorkerTransaction[]
+  apiUsage          ApiUsage[]
+  achievements      UserAchievement[]
+  streaks           UserStreak[]
+  referrals         Referral[]      @relation("Referrer")
+  referredBy        Referral?       @relation("ReferredUser")
+  warnings          WorkerWarning[]
+  accuracyHistory   WorkerAccuracyHistory[]
+  behaviorAnalysis  WorkerBehaviorAnalysis[]
+  cryptoWallets     UserCryptoWallet[]
+  bankDetails       BankDetail[]
+  payoutConfig      PayoutConfig?
+
+  @@map("users")
+}
+
+enum UserRole {
+  WORKER
+  CLIENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+// ============================================================================
+// PROJECT MANAGEMENT
+// ============================================================================
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  client      User        @relation(fields: [clientId], references: [id])
+  clientId    String      @map("client_id")
+  status      ProjectStatus @default(ACTIVE)
+  settings    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  tasks       Task[]
+  responses   Response[]
+  payments    ClientPayment[]
+
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  ARCHIVED
+}
+
+// ============================================================================
+// TASK MANAGEMENT
+// ============================================================================
+
+model Task {
+  id              String         @id @default(cuid())
+  projectId       String         @map("project_id")
+  title           String
+  description     String?
+  type            String
+  subType         String?        @map("sub_type")
+  data            Json
+  options         String[]?
+  status          TaskStatus     @default(PENDING)
+  priority        Int            @default(1)
+  assignedTo      String?        @map("assigned_to")
+  assignedAt      DateTime?      @map("assigned_at")
+  completedAt     DateTime?      @map("completed_at")
+  dueAt           DateTime?      @map("due_at")
+
+  // AI and Quality fields
+  aiPrelabel      String?        @map("ai_prelabel")
+  aiConfidence    Decimal?       @map("ai_confidence") @db.Decimal(3, 2)
+  consensusTarget Int            @default(3) @map("consensus_target")
+  consensusLevel  ConsensusLevel @default(PENDING) @map("consensus_level")
+  finalLabel      String?        @map("final_label")
+  qualityScore    Decimal?       @map("quality_score") @db.Decimal(3, 2)
+
+  // Pricing
+  basePrice       Decimal        @map("base_price") @db.Decimal(10, 4)
+  points          Int            @default(1)
+  multiplier      Decimal        @default(1.0) @map("multiplier") @db.Decimal(3, 2)
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  project         Project        @relation(fields: [projectId], references: [id])
+  assignee        User?          @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  responses       Response[]
+  consensus       TaskConsensus?
+  examples        TaskExample[]
+  seenBy          TaskSeen[]
+  pricing         TaskPricing?
+  validationQueue AIValidationQueue[]
+
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  CANCELLED
+  EXPIRED
+}
+
+enum ConsensusLevel {
+  PENDING
+  CONFLICTING
+  AGREED
+  VALIDATED
+  REJECTED
+}
+
+// ============================================================================
+// RESPONSES AND LABELING
+// ============================================================================
+
+model Response {
+  id          String      @id @default(cuid())
+  taskId      String      @map("task_id")
+  workerId    String      @map("worker_id")
+  label       String
+  confidence  Decimal?    @db.Decimal(3, 2)
+  timeSpent   Int?        @map("time_spent") // in seconds
+  metadata    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  task        Task        @relation(fields: [taskId], references: [id])
+  worker      User        @relation(fields: [workerId], references: [id])
+  boundingBoxes BoundingBox[]
+  transcriptions Transcription[]
+  rlhfComparisons RLHFComparison[]
+  sentimentAnalyses SentimentAnalysis[]
+
+  @@map("responses")
+}
+
+// ============================================================================
+// ANNOTATION TYPES
+// ============================================================================
+
+model BoundingBox {
+  id        String   @id @default(cuid())
+  responseId String  @map("response_id")
+  x         Float
+  y         Float
+  width     Float
+  height    Float
+  label     String
+  confidence Decimal? @db.Decimal(3, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  response  Response @relation(fields: [responseId], references: [id])
+
+  @@map("bounding_boxes")
+}
+
+model Transcription {
+  id         String   @id @default(cuid())
+  responseId String   @map("response_id")
+  text       String
+  confidence Decimal? @db.Decimal(3, 2)
+  language   String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  response   Response @relation(fields: [responseId], references: [id])
+
+  @@map("transcriptions")
+}
+
+model RLHFComparison {
+  id         String   @id @default(cuid())
+  responseId String   @map("response_id")
+  optionA    String
+  optionB    String
+  preferred  String
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  response   Response @relation(fields: [responseId], references: [id])
+
+  @@map("rlhf_comparisons")
+}
+
+model SentimentAnalysis {
+  id         String   @id @default(cuid())
+  responseId String   @map("response_id")
+  sentiment  String
+  score      Decimal  @db.Decimal(3, 2)
+  confidence Decimal? @db.Decimal(3, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  response   Response @relation(fields: [responseId], references: [id])
+
+  @@map("sentiment_analyses")
+}
+
+// ============================================================================
+// PAYMENT SYSTEM
+// ============================================================================
+
+model Wallet {
+  id            String   @id @default(cuid())
+  userId        String   @unique @map("user_id")
+  address       String   @unique
+  testnet       Boolean  @default(true)
+  balance       Decimal  @default(0) @db.Decimal(20, 6)
+  frozenBalance Decimal  @default(0) @map("frozen_balance") @db.Decimal(20, 6)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@map("wallets")
+}
+
+model Transaction {
+  id              String         @id @default(cuid())
+  userId          String         @map("user_id")
+  amount          Decimal        @db.Decimal(20, 6)
+  currency        String         @default("USDT")
+  type            TransactionType
+  status          TransactionStatus @default(PENDING)
+  referenceType   String?        @map("reference_type")
+  referenceId     String?        @map("reference_id")
+  walletAddress   String?        @map("wallet_address")
+  transactionHash String?        @map("transaction_hash")
+  fee             Decimal        @default(0) @db.Decimal(20, 6)
+  description     String?
+  metadata        Json?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  completedAt     DateTime?      @map("completed_at")
+
+  // Relations
+  user            User           @relation(fields: [userId], references: [id])
+
+  @@map("transactions")
+}
+
+enum TransactionType {
+  EARNING
+  WITHDRAWAL
+  DEPOSIT
+  BONUS
+  REFERRAL
+  PENALTY
+  ADJUSTMENT
+  STAKING_REWARD
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Withdrawal {
+  id               String          @id @default(cuid())
+  userId           String          @map("user_id")
+  amount           Decimal         @db.Decimal(20, 6)
+  currency         String          @default("USDT")
+  status           WithdrawalStatus @default(PENDING)
+  walletAddress    String          @map("wallet_address")
+  transactionHash  String?         @map("transaction_hash")
+  fee              Decimal         @default(0) @db.Decimal(20, 6)
+  batchId          String?         @map("batch_id")
+  processedAt      DateTime?       @map("processed_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  user             User            @relation(fields: [userId], references: [id])
+
+  @@map("withdrawals")
+}
+
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ============================================================================
+// CLIENT PAYMENTS
+// ============================================================================
+
+model ClientPayment {
+  id            String          @id @default(cuid())
+  projectId     String          @map("project_id")
+  clientId      String          @map("client_id")
+  amount        Decimal         @db.Decimal(20, 6)
+  currency      String          @default("USDT")
+  status         PaymentStatus   @default(PENDING)
+  paymentMethod String?         @map("payment_method")
+  description   String?
+  metadata      Json?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  completedAt   DateTime?       @map("completed_at")
+
+  // Relations
+  project       Project         @relation(fields: [projectId], references: [id])
+  client        User            @relation(fields: [clientId], references: [id])
+
+  @@map("client_payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================================================
+// WORKER TRANSACTIONS (LEGACY)
+// ============================================================================
+
+model WorkerTransaction {
+  id          String   @id @default(cuid())
+  workerId    String   @map("worker_id")
+  amount      Decimal  @db.Decimal(20, 6)
+  type        String
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  worker      User     @relation(fields: [workerId], references: [id])
+
+  @@map("worker_transactions")
+}
+
+// ============================================================================
+// CONSENSUS AND QUALITY CONTROL
+// ============================================================================
+
+model TaskConsensus {
+  taskId         String   @id @map("task_id")
+  finalLabel     String?  @map("final_label")
+  confidence     Decimal? @db.Decimal(3, 2)
+  disagreement   Float    @default(0)
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?  @map("resolved_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  task           Task     @relation(fields: [taskId], references: [id])
+
+  @@map("task_consensus")
+}
+
+model TaskPricing {
+  taskId     String   @id @map("task_id")
+  basePrice  Decimal  @map("base_price") @db.Decimal(10, 4)
+  difficulty String?
+  timeEstimate Int?   @map("time_estimate") // in seconds
+  multiplier Decimal  @default(1.0) @db.Decimal(3, 2)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  task       Task     @relation(fields: [taskId], references: [id])
+
+  @@map("task_pricing")
+}
+
+model WorkerAccuracyHistory {
+  id        String   @id @default(cuid())
+  workerId  String   @map("worker_id")
+  date      DateTime @default(now()) @db.Date
+  accuracy  Decimal  @db.Decimal(5, 2)
+  tasks     Int      @default(0)
+  correct   Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  worker    User     @relation(fields: [workerId], references: [id])
+
+  @@map("worker_accuracy_history")
+}
+
+// ============================================================================
+// AI INTEGRATION
+// ============================================================================
+
+model AILabel {
+  id          String    @id @default(cuid())
+  taskId      String    @map("task_id")
+  label       String
+  confidence  Decimal?  @db.Decimal(3, 2)
+  model       String
+  version     String?
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("ai_labels")
+}
+
+model AIValidationQueue {
+  id          String          @id @default(cuid())
+  taskId      String          @map("task_id")
+  status      ValidationStatus @default(PENDING)
+  assignedTo  String?         @map("assigned_to")
+  startedAt   DateTime?       @map("started_at")
+  completedAt DateTime?       @map("completed_at")
+  result      Json?
+  error       String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  task        Task            @relation(fields: [taskId], references: [id])
+
+  @@map("ai_validation_queue")
+}
+
+enum ValidationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// ============================================================================
+// WORKER MANAGEMENT
+// ============================================================================
+
+model WorkerWarning {
+  id          String       @id @default(cuid())
+  workerId    String       @map("worker_id")
+  type        WarningType
+  reason      String
+  severity    WarningSeverity
+  expiresAt   DateTime?    @map("expires_at")
+  acknowledged Boolean     @default(false)
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  worker      User         @relation(fields: [workerId], references: [id])
+
+  @@map("worker_warnings")
+}
+
+enum WarningType {
+  LOW_ACCURACY
+  RAPID_SKIPPING
+  SUSPICIOUS_PATTERN
+  VIOLATION
+  TIME_MANAGEMENT
+}
+
+enum WarningSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model WorkerBehaviorAnalysis {
+  id          String   @id @default(cuid())
+  workerId    String   @map("worker_id")
+  date        DateTime @default(now()) @db.Date
+  avgTimePerTask Float   @map("avg_time_per_task")
+  skipRate    Decimal  @db.Decimal(5, 2)
+  accuracyTrend String? @map("accuracy_trend")
+  activityPattern Json?   @map("activity_pattern")
+  riskScore   Decimal  @db.Decimal(3, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  worker      User     @relation(fields: [workerId], references: [id])
+
+  @@map("worker_behavior_analysis")
+}
+
+// ============================================================================
+// GAMIFICATION AND VIRAL FEATURES
+// ============================================================================
+
+model Achievement {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  icon        String
+  category    String
+  points      Int
+  condition   Json
+  hidden      Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  users       UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  achievementId String   @map("achievement_id")
+  progress      Int      @default(0)
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user          User     @relation(fields: [userId], references: [id])
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model Level {
+  id        String   @id @default(cuid())
+  level     Int      @unique
+  name      String
+  minPoints Int      @map("min_points")
+  rewards   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("levels")
+}
+
+model UserStreak {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  date        DateTime @default(now()) @db.Date
+  tasksCompleted Int   @map("tasks_completed")
+  bonusEarned Decimal  @map("bonus_earned") @db.Decimal(20, 6)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@map("user_streaks")
+}
+
+model Referral {
+  id            String        @id @default(cuid())
+  referrerId    String        @map("referrer_id")
+  referredId    String?       @map("referred_id")
+  code          String        @unique
+  status        ReferralStatus @default(PENDING)
+  rewardAmount  Decimal?      @map("reward_amount") @db.Decimal(20, 6)
+  completedAt   DateTime?     @map("completed_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  referrer      User          @relation("Referrer", fields: [referrerId], references: [id])
+  referred      User?         @relation("ReferredUser", fields: [referredId], references: [id])
+
+  @@map("referrals")
+}
+
+enum ReferralStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+// ============================================================================
+// ANALYTICS AND MONITORING
+// ============================================================================
+
+model ApiUsage {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  endpoint  String
+  method    String
+  status    Int
+  duration  Int      // in milliseconds
+  userAgent String?  @map("user_agent")
+  ip        String?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("api_usage")
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?  @map("user_id")
+  event     String
+  category  String
+  data      Json?
+  timestamp DateTime @default(now())
+
+  @@map("analytics_events")
+}
+
+// ============================================================================
+// TON BLOCKCHAIN INTEGRATION
+// ============================================================================
+
+model TonTransaction {
+  id                  String            @id @default(cuid())
+  userId              String            @map("user_id")
+  transactionHash     String            @unique @map("transaction_hash")
+  fromAddress         String            @map("from_address")
+  toAddress           String            @map("to_address")
+  amount              Decimal           @db.Decimal(20, 6)
+  currency            String            @default("TON")
+  status              TonTxStatus       @default(PENDING)
+  blockHeight         Int?              @map("block_height")
+  lt                  BigInt?
+  message             String?
+  fee                 Decimal           @default(0) @db.Decimal(20, 6)
+  externalTxId        String?           @map("external_tx_id")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  confirmedAt         DateTime?         @map("confirmed_at")
+
+  @@map("ton_transactions")
+}
+
+enum TonTxStatus {
+  PENDING
+  SENT
+  CONFIRMED
+  FAILED
+}
+
+model UserCryptoWallet {
+  id          String              @id @default(cuid())
+  userId      String              @map("user_id")
+  blockchain  String
+  address     String
+  label       String?
+  isDefault   Boolean             @default(false) @map("is_default")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  user        User                @relation(fields: [userId], references: [id])
+
+  @@unique([userId, blockchain, address])
+  @@map("user_crypto_wallets")
+}
+
+// ============================================================================
+// PAYOUT CONFIGURATION
+// ============================================================================
+
+model BankDetail {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  bankName    String   @map("bank_name")
+  accountName String   @map("account_name")
+  accountNumber String @map("account_number")
+  routingNumber String? @map("routing_number")
+  swiftCode   String?  @map("swift_code")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("bank_details")
+}
+
+model PayoutConfig {
+  id            String     @id @default(cuid())
+  userId        String     @unique @map("user_id")
+  method        PayoutMethod
+  minAmount     Decimal    @map("min_amount") @db.Decimal(20, 6)
+  autoWithdraw  Boolean    @default(false) @map("auto_withdraw")
+  schedule      String?    // cron expression
+  preferredCurrency String? @map("preferred_currency")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  user          User       @relation(fields: [userId], references: [id])
+
+  @@map("payout_configs")
+}
+
+enum PayoutMethod {
+  TON
+  BITCOIN
+  ETHEREUM
+  BANK_TRANSFER
+  PAYPAL
+  WISE
+}
+
+// ============================================================================
+// TASK TRACKING
+// ============================================================================
+
+model TaskSeen {
+  id        String   @id @default(cuid())
+  taskId    String   @map("task_id")
+  workerId  String   @map("worker_id")
+  seenAt    DateTime @default(now()) @map("seen_at")
+  skipped   Boolean  @default(false)
+  skipReason String? @map("skip_reason")
+
+  // Relations
+  task      Task     @relation(fields: [taskId], references: [id])
+
+  @@unique([taskId, workerId])
+  @@map("task_seen")
+}
+
+model TaskExample {
+  id          String   @id @default(cuid())
+  taskId      String   @map("task_id")
+  title       String
+  description String?
+  data        Json
+  label       String
+  isGood      Boolean  @default(true) @map("is_good")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  task        Task     @relation(fields: [taskId], references: [id])
+
+  @@map("task_examples")
+}
+
+// ============================================================================
+// GROWTH AUTOMATION (CRM FEATURES)
+// ============================================================================
+
+model Lead {
+  id          String     @id @default(cuid())
+  email       String     @unique
+  name        String?
+  company     String?
+  source      String?
+  status      LeadStatus @default(NEW)
+  score       Int        @default(0)
+  metadata    Json?
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+model Campaign {
+  id          String        @id @default(cuid())
+  name        String
+  type        CampaignType
+  status      CampaignStatus @default(DRAFT)
+  config      Json
+  startDate   DateTime?     @map("start_date")
+  endDate     DateTime?     @map("end_date")
+  metrics     Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  EMAIL
+  SOCIAL_MEDIA
+  ADS
+  REFERRAL
+  CONTENT
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model SocialEngagement {
+  id          String   @id @default(cuid())
+  platform    String
+  postId      String   @map("post_id")
+  content     String?
+  url         String?
+  metrics     Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("social_engagements")
+}
+
+model EmailSequence {
+  id          String   @id @default(cuid())
+  name        String
+  trigger     String
+  steps       Json     // array of email steps
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("email_sequences")
+}
+
+model FreeTierAccount {
+  id          String   @id @default(cuid())
+  userId      String?  @map("user_id")
+  email       String   @unique
+  labelsUsed  Int      @default(0) @map("labels_used")
+  labelsLimit Int      @default(100) @map("labels_limit")
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("free_tier_accounts")
+}

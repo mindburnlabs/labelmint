@@ -1,0 +1,53 @@
+{
+  "name": "@labelmint/utils",
+  "version": "1.0.0",
+  "description": "Shared utility functions for LabelMint applications",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "utilities",
+    "helpers",
+    "formatters",
+    "validation",
+    "typescript"
+  ],
+  "author": "LabelMint Team",
+  "license": "MIT",
+  "dependencies": {
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0",
+    "eslint": "^8.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "files": [
+    "src/**/*"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui/cn.ts",
+    "./format": "./src/format/index.ts",
+    "./async": "./src/async/index.ts",
+    "./dom": "./src/dom/index.ts",
+    "./device": "./src/device/index.ts",
+    "./string": "./src/string/index.ts",
+    "./math": "./src/math/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/labelmint/utils"
+  }
+}

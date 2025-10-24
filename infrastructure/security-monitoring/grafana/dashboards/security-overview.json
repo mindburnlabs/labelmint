@@ -1,0 +1,445 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Security Documentation",
+      "tooltip": "",
+      "type": "link",
+      "url": "https://docs.labelmint.it/security"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Incident Response",
+      "tooltip": "",
+      "type": "link",
+      "url": "https://github.com/mindburn-labs/labelmint/actions/workflows/security-incident.yml"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "links": [],
+      "options": {
+        "displayMode": "list",
+        "pageSize": 10,
+        "showPage": true,
+        "sort": 1,
+        "tags": []
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "ALERTS_FOR_STATE{alertstate=\"firing\"}",
+          "format": "table",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{ alertname }}",
+          "refId": "A",
+          "hide": false
+        }
+      ],
+      "title": "Active Security Alerts",
+      "type": "table"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "links": [],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m]))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "5xx Errors",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"4..\"}[5m]))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "4xx Errors",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(http_requests_total[5m]))",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Total Requests",
+          "refId": "C"
+        }
+      ],
+      "title": "HTTP Error Rates",
+      "type": "stat"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "links": [],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "rate_limit_exceeded_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Rate Limits Exceeded",
+          "refId": "A"
+        },
+        {
+          "expr": "rate_limit_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Total Rate Limit Checks",
+          "refId": "B"
+        },
+        {
+          "expr": "failed_authentications_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Failed Authentications",
+          "refId": "C"
+        },
+        {
+          "expr": "successful_authentications_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Successful Authentications",
+          "refId": "D"
+        }
+      ],
+      "title": "Authentication & Rate Limiting",
+      "type": "stat"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "links": [],
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "blocked_ips_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Blocked IPs",
+          "refId": "A"
+        },
+        {
+          "expr": "failed_login_attempts_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Failed Login Attempts",
+          "refId": "B"
+        },
+        {
+          "expr": "suspicious_activity_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Suspicious Activity",
+          "refId": "C"
+        },
+        {
+          "expr": "security_violations_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Security Violations",
+          "refId": "D"
+        }
+      ],
+      "title": "Security Incidents",
+      "type": "stat"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "links": [],
+      "options": {
+        "displayLabels": true,
+        "displayUnconnected": true,
+        "height": 400,
+        "legend": {
+          "avg": false,
+          "current": false,
+          "max": false,
+          "min": false,
+          "show": true,
+          "total": false,
+          "values": false
+        },
+        "minSpan": 4,
+        "root": "Root",
+        "showRoot": true
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "node_cpu_seconds_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "CPU Usage",
+          "refId": "A"
+        },
+        {
+          "expr": "node_memory_MemAvailable_bytes",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Available Memory",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(disk_io_time_seconds_total[5m])",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Disk I/O",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(network_receive_bytes_total[5m]) + rate(network_transmit_bytes_total[5m])",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Network Traffic",
+          "refId": "D"
+        }
+      ],
+      "title": "Infrastructure Security Overview",
+      "type": "tree"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "links": [],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "ssl_certificate_expiry_days",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Days Until Expiry",
+          "refId": "A"
+        },
+        {
+          "expr": "security_headers_score",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Security Headers Score",
+          "refId": "B"
+        }
+      ],
+      "title": "SSL & Security Headers",
+      "type": "stat"
+    },
+    {
+      "cacheTimeout": null,
+      "datasource": "Prometheus",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 7,
+      "links": [],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "7.4.3",
+      "targets": [
+        {
+          "expr": "vulnerability_critical_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Critical Vulnerabilities",
+          "refId": "A"
+        },
+        {
+          "expr": "vulnerability_high_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "High Vulnerabilities",
+          "refId": "B"
+        },
+        {
+          "expr": "vulnerability_medium_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Medium Vulnerabilities",
+          "refId": "C"
+        },
+        {
+          "expr": "vulnerability_low_total",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "Low Vulnerabilities",
+          "refId": "D"
+        }
+      ],
+      "title": "Vulnerability Scan Results",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "revision": 1,
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [
+    "security",
+    "monitoring"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timezone": "",
+  "title": "Security Overview Dashboard",
+  "uid": "security-overview",
+  "version": 1
+}

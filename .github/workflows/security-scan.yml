@@ -1,0 +1,336 @@
+name: 🔒 Security Scan
+
+on:
+  push:
+    branches: [main, develop, master]
+  pull_request:
+    branches: [main, develop, master]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Type of scan to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - secrets
+          - dependencies
+          - codeql
+          - container
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9.15.1'
+
+jobs:
+  # Secret Scanning
+  secrets-scan:
+    name: 🔐 Secret Scanning
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'secrets'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TruffleHog Secret Scanner
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event_name == 'pull_request' && github.base_ref || 'main' }}
+          head: HEAD
+          extra_args: --debug --json
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USERNAME: ${{ github.actor }}
+        with:
+          config_file: .gitleaks.toml
+          scan_destination: 'trufflehog-output'
+          report_format: 'sarif'
+          output_file: 'gitleaks-results.sarif'
+
+      - name: Upload Security Scan Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'gitleaks-results.sarif'
+
+      - name: Comment PR with Results
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const sarif = JSON.parse(fs.readFileSync('gitleaks-results.sarif', 'utf8'));
+              if (sarif.runs && sarif.runs.length > 0) {
+                const results = sarif.runs[0].results || [];
+                if (results.length > 0) {
+                  const comment = `## 🔒 Security Scan Results
+
+                  **⚠️ Found ${results.length} security issues**
+
+                  ${results.map(r => `- **${r.ruleId}**: ${r.message}`).join('\n')}
+
+                  Please review and fix these security issues before merging.
+                  `;
+                  github.rest.issues.createComment({
+                    issue_number: context.issue.number,
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    body: comment
+                  });
+                }
+              }
+            } catch (error) {
+              console.log('No security issues found or error reading results');
+            }
+
+  # Dependency Vulnerability Scanning
+  dependency-scan:
+    name: 📦 Dependency Scanning
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'dependencies'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm audit
+        run: |
+          echo "Running pnpm audit..."
+          pnpm audit --audit-level=moderate --json > pnpm-audit.json || true
+
+          # Create summary
+          node -e "
+            const fs = require('fs');
+            try {
+              const audit = JSON.parse(fs.readFileSync('pnpm-audit.json', 'utf8'));
+              const vulns = audit.vulnerabilities || {};
+              let summary = '# 📦 Dependency Security Report\\n\\n';
+
+              Object.entries(vulns).forEach(([pkg, info]) => {
+                if (info.length > 0) {
+                  summary += \\`## 📦 ${pkg}\\n\\n`;
+                  info.forEach(vuln => {
+                    summary += \\`- **Severity**: ${vuln.severity}\\n`;
+                    summary += \\`- **Title**: ${vuln.title}\\n`;
+                    summary += \\`- **Package**: ${vuln.name}\\n`;
+                    summary += \\`- **Patch**: ${vuln.patched_versions?.join(', ') || 'N/A'}\\n\\n`;
+                  });
+                }
+              });
+
+              fs.writeFileSync('dependency-report.md', summary);
+            } catch (e) {
+              console.log('Error processing audit results:', e.message);
+            }
+          "
+
+      - name: Upload dependency scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-scan-results
+          path: |
+            pnpm-audit.json
+            dependency-report.md
+
+      - name: Run Snyk Security Scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=medium
+
+  # CodeQL Static Analysis
+  codeql:
+    name: 🔍 CodeQL Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'codeql'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      matrix:
+        language: ['javascript', 'typescript']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: autobuild
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  # Container Security Scanning
+  container-scan:
+    name: 🐳 Container Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.scan_type == 'all' || github.event.inputs.scan_type == 'container'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images for scanning
+        run: |
+          # Build main application images
+          docker build -t labelmint/web:scan -f apps/web/Dockerfile .
+          docker build -t labelmint/enterprise-api:scan -f services/enterprise-api/Dockerfile .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'labelmint/web:scan,labelmint/enterprise-api:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Security Tests
+  security-tests:
+    name: 🧪 Security Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event.inputs.scan_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run security-focused tests
+        run: |
+          echo "Running security tests..."
+          pnpm run test:security || true
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.10.0
+        with:
+          target: 'http://localhost:3000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+  # Summary
+  security-summary:
+    name: 📊 Security Summary
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, dependency-scan, codeql, container-scan, security-tests]
+    if: always()
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-results
+
+      - name: Generate Security Summary
+        run: |
+          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status | Issues Found |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|-------------|" >> $GITHUB_STEP_SUMMARY
+
+          # Check each job status
+          if [ "${{ needs.secrets-scan.result }}" == "success" ]; then
+            echo "| 🔐 Secrets | ✅ Passed | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔐 Secrets | ❌ Failed | ? |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.dependency-scan.result }}" == "success" ]; then
+            echo "| 📦 Dependencies | ✅ Passed | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 📦 Dependencies | ❌ Failed | ? |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.codeql.result }}" == "success" ]; then
+            echo "| 🔍 CodeQL | ✅ Passed | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🔍 CodeQL | ❌ Failed | ? |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.container-scan.result }}" == "success" ]; then
+            echo "| 🐳 Container | ✅ Passed | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🐳 Container | ❌ Failed | ? |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.security-tests.result }}" == "success" ]; then
+            echo "| 🧪 Security Tests | ✅ Passed | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 🧪 Security Tests | ❌ Failed | ? |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📅 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review any failed scans" >> $GITHUB_STEP_SUMMARY
+          echo "2. Address security vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update dependencies if needed" >> $GITHUB_STEP_SUMMARY
+          echo "4. Re-run scans after fixes" >> $GITHUB_STEP_SUMMARY

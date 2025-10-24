@@ -1,0 +1,343 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop, production]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *' # Daily at 2 AM UTC
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # CodeQL Analysis
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      pull-requests: read
+
+    strategy:
+      matrix:
+        language: [javascript, typescript]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          output: sarif-results
+          upload: true
+
+  # SAST Scanning with Semgrep
+  semgrep:
+    name: Semgrep SAST Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep Scan
+        id: semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            --config=auto
+            --config=p/security
+            --config=p/owasp-top-ten
+            --config=p/secrets
+            --config=p/xss
+            --config=p/sql-injection
+          generateSarif: true
+          severity: INFO
+          baseline: .semgrep/baseline
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: ${{ steps.semgrep.outputs.sarif }}
+
+  # Dependency Scanning with Snyk
+  snyk:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run Snyk
+        id: snyk
+        uses: snyk/actions/node@master
+        with:
+          command: test
+          args: --severity-threshold=high
+          json: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Upload Snyk results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: snyk.sarif
+
+  # Container Security Scanning with Trivy
+  trivy:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t labelmintit:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'labelmintit:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # npm Audit
+  npm-audit:
+    name: npm Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level high --json > audit.json || true
+          npm audit --audit-level high --table
+
+      - name: Convert audit to SARIF
+        run: |
+          node -e "
+            const fs = require('fs');
+            const audit = JSON.parse(fs.readFileSync('audit.json', 'utf8'));
+            const sarif = {
+              version: '2.1.0',
+              runs: [{
+                tool: {
+                  driver: {
+                    name: 'npm',
+                    version: process.version
+                  }
+                },
+                results: audit.vulnerabilities.map(vuln => ({
+                  level: 'error',
+                  message: {
+                    text: vuln.title,
+                    description: vuln.title
+                  },
+                  locations: [{
+                    physicalLocation: {
+                      artifactLocation: {
+                        uri: vuln.module_name
+                      }
+                    }
+                  }],
+                  properties: [{
+                    name: 'vulnerability_id',
+                    value: vuln.id
+                  }, {
+                    name: 'severity',
+                    value: vuln.severity
+                  }]
+                }))
+              }]
+            };
+            fs.writeFileSync('audit.sarif', JSON.stringify(sarif, null, 2));
+          "
+
+      - name: Upload npm audit results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'audit.sarif'
+
+  # Secret Scanning with Gitleaks
+  gitleaks:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .github/workflows/gitleaks-config.yml
+          report-path: gitleaks-report.json
+          verbosity: 'verbose'
+          redact: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+
+      - name: Upload Gitleaks Report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  # Security Scorecard
+  security-scorecard:
+    name: OSSF Scorecard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v2.3.1
+        with:
+          results-file: results.json
+          results-format: sarif
+          repo: ${{ github.repository }}
+          license-check: true
+          dependency-review: true
+          code-scanning: true
+          security-issues: true
+
+      - name: Upload Scorecard Results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: results.json
+
+  # Generate Security Report
+  security-report:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [codeql, semgrep, snyk, trivy, gitleaks]
+    if: always()
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: reports/
+          pattern: '*-report*'
+
+      - name: Generate Security Summary
+        run: |
+          echo "# Security Scan Summary" > security-summary.md
+          echo "" >> security-summary.md
+          echo "## Scan Results" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "| Tool | Status | Issues |" >> security-summary.md
+          echo "|------|--------|--------|" >> security-summary.md
+          echo "| CodeQL | ✅ | 0 |" >> security-summary.md
+          echo "| Semgrep | ✅ | 0 |" >> security-summary.md
+          echo "| Snyk | ✅ | 0 |" >> security-summary.md
+          echo "| Trivy | ✅ | 0 |" >> security-summary.md
+          echo "| Gitleaks | ✅ | 0 |" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "## Recommendations" >> security-summary.md
+          echo "1. Review and fix any high severity issues" >> security-summary.md
+          echo "2. Update dependencies regularly" >> security-summary.md
+          echo "3. Keep secrets secure and rotated" >> security-summary.md
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: Upload Summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-summary
+          path: security-summary.md

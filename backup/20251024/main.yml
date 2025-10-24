@@ -1,0 +1,323 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Code Quality and Security
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run security audit
+        run: npm audit --audit-level=moderate
+
+  # Matrix Testing
+  test:
+    name: Test on Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    needs: code-quality
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run tests
+        run: npm test --if-present
+
+      - name: Upload coverage reports
+        if: matrix.node-version == '20.x'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+  # Docker Build and Push
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+            NEXT_PUBLIC_BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+  # Staging Deployment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.labelmint.it
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to ECS Staging
+        run: |
+          aws ecs update-service \
+            --cluster labelmint-staging \
+            --service labelmint-app \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster labelmint-staging \
+            --services labelmint-app \
+            --region us-east-1
+
+      - name: Run health checks
+        run: |
+          sleep 30
+          curl -f https://staging.labelmint.it/api/health || exit 1
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: '🚀 Staging deployment completed successfully!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Production Deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://labelmint.it
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Create backup task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition labelmint-production \
+            --query 'taskDefinition' > backup-task-def.json
+
+      - name: Update task definition with new image
+        id: task-def
+        run: |
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition labelmint-production)
+          NEW_TASK_DEF=$(echo $TASK_DEF | jq '.taskDefinition | .containerDefinitions[0].image="${{ needs.build-and-push.outputs.image-tag }}" | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+          NEW_TASK_INFO=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF")
+          echo "task-definition-arn=$NEW_TASK_INFO | jq -r '.taskDefinition.taskDefinitionArn')" >> $GITHUB_OUTPUT
+
+      - name: Deploy to ECS Production
+        run: |
+          aws ecs update-service \
+            --cluster labelmint-production \
+            --service labelmint-app \
+            --task-definition ${{ steps.task-def.outputs.task-definition-arn }} \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster labelmint-production \
+            --services labelmint-app \
+            --region us-east-1
+
+      - name: Run smoke tests
+        run: |
+          sleep 60
+          ./scripts/smoke-tests.sh https://labelmint.it
+
+      - name: Create rollback tag
+        if: success()
+        run: |
+          git tag rollback-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}
+          git push origin rollback-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: '🎉 Production deployment completed successfully!'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Rollback Job
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [deploy-production, build-and-push]
+    environment:
+      name: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get previous task definition
+        id: previous-task
+        run: |
+          PREV_TASK=$(aws ecs describe-task-definition \
+            --task-definition labelmint-production \
+            --query 'taskDefinition.revision' \
+            --output text)
+          PREV_TASK=$((PREV_TASK - 1))
+          echo "previous-revision=$PREV_TASK" >> $GITHUB_OUTPUT
+
+      - name: Rollback to previous version
+        run: |
+          aws ecs update-service \
+            --cluster labelmint-production \
+            --service labelmint-app \
+            --task-definition labelmint-production:${{ steps.previous-task.outputs.previous-revision }} \
+            --force-new-deployment \
+            --region us-east-1
+
+      - name: Wait for rollback
+        run: |
+          aws ecs wait services-stable \
+            --cluster labelmint-production \
+            --services labelmint-app \
+            --region us-east-1
+
+      - name: Verify rollback health
+        run: |
+          sleep 30
+          curl -f https://labelmint.it/api/health || exit 1
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'custom'
+          channel: '#deployments'
+          text: '🚨 Production rollback completed! reverted to revision ${{ steps.previous-task.outputs.previous-revision }}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Performance Testing
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.12.x
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+          LHCI_SERVER_URL: https://staging.labelmint.it
+
+      - name: Run k6 performance test
+        run: |
+          docker run --rm -i grafana/k6 run - < k6-tests/load-test.js \
+            --env BASE_URL=https://staging.labelmint.it

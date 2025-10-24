@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for testing
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: labelmint-postgres-test
+    environment:
+      POSTGRES_DB: labelmint_test
+      POSTGRES_USER: labelmint_test
+      POSTGRES_PASSWORD: test_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labelmint_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for testing
+  redis-test:
+    image: redis:7-alpine
+    container_name: labelmint-redis-test
+    command: redis-server --appendonly no
+    tmpfs:
+      - /data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Test runner
+  test-runner:
+    build:
+      context: ./services/labeling-backend
+      dockerfile: Dockerfile.test
+    container_name: labelmint-test-runner
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://labelmint_test:test_password@postgres-test:5432/labelmint_test
+      REDIS_URL: redis://redis-test:6379
+      JWT_SECRET: test_jwt_secret
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    volumes:
+      - ./services/labeling-backend/test:/app/test
+      - ./services/labeling-backend/jest.config.js:/app/jest.config.js
+    command: npm test
+
+  # E2E tests
+  e2e-tests:
+    build:
+      context: ./tests/e2e
+      dockerfile: Dockerfile
+    container_name: labelmint-e2e-tests
+    environment:
+      BASE_URL: http://frontend-test:3000
+      API_URL: http://backend-test:3001
+      BROWSER: chrome
+    depends_on:
+      - backend-test
+      - frontend-test
+    volumes:
+      - ./tests/e2e:/app/tests
+      - ./tests/e2e/playwright.config.ts:/app/playwright.config.ts
+    command: npx playwright test
+
+  # Backend for testing
+  backend-test:
+    build:
+      context: ./services/labeling-backend
+      dockerfile: Dockerfile
+    container_name: labelmint-backend-test
+    environment:
+      NODE_ENV: test
+      PORT: 3001
+      DATABASE_URL: postgresql://labelmint_test:test_password@postgres-test:5432/labelmint_test
+      REDIS_URL: redis://redis-test:6379
+      JWT_SECRET: test_jwt_secret
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+
+  # Frontend for testing
+  frontend-test:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: labelmint-frontend-test
+    environment:
+      NODE_ENV: test
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://backend-test:3001
+    ports:
+      - "3000:3000"
+
+networks:
+  default:
+    name: labelmint-test-network

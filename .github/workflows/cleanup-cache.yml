@@ -1,0 +1,33 @@
+name: Cleanup CI/CD Cache
+
+on:
+  schedule:
+    # Run cleanup weekly on Sundays at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  cleanup-cache:
+    name: Cleanup GitHub Actions Cache
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: List caches
+        run: |
+          echo "Fetching cache list..."
+          gh cache list --limit 100 --repo ${{ github.repository }}
+
+      - name: Delete old caches
+        run: |
+          # Delete caches older than 7 days
+          gh cache list --repo ${{ github.repository }} --limit 100 |
+          awk 'NR > 50 { print $1 }' |
+          xargs -I {} gh cache delete {} --repo ${{ github.repository }} --confirm || true
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Report cleanup results
+        run: |
+          echo "Cache cleanup completed. Remaining caches:"
+          gh cache list --repo ${{ github.repository }} --limit 20

@@ -1,0 +1,636 @@
+{
+	"info": {
+		"_postman_id": "labelmint-api-collection",
+		"name": "Telegram Labeling Platform API",
+		"description": "Complete API collection for the Telegram Labeling Platform. Includes authentication, tasks, projects, AI features, and webhooks.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"version": {
+			"major": 1,
+			"minor": 2,
+			"patch": 0
+		},
+		"contact": {
+			"name": "API Support",
+			"email": "api-support@labelmint.it",
+			"url": "https://labelmint.it/support"
+		}
+	},
+	"auth": {
+		"type": "apikey",
+		"apikey": [
+			{
+				"key": "X-API-Key",
+				"value": "{{apiKey}}",
+				"type": "string"
+			},
+			{
+				"key": "X-Timestamp",
+				"value": "{{timestamp}}",
+				"type": "string"
+			},
+			{
+				"key": "X-Signature",
+				"value": "{{signature}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Generate timestamp for authentication",
+					"pm.collectionVariables.set('timestamp', Math.floor(Date.now() / 1000).toString());",
+					"",
+					"// Generate HMAC signature if we have a secret",
+					"if (pm.collectionVariables.get('apiSecret')) {",
+					"    const crypto = require('crypto-js');",
+					"    const timestamp = pm.collectionVariables.get('timestamp');",
+					"    const secret = pm.collectionVariables.get('apiSecret');",
+					"    const body = pm.request.body ? pm.request.body.raw : '';",
+					"    ",
+					"    const signature = crypto.HmacSHA256(timestamp + body, secret).toString();",
+					"    pm.collectionVariables.set('signature', signature);",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Log rate limit headers",
+					"if (pm.response.headers.get('X-RateLimit-Limit')) {",
+					"    console.log('Rate Limit:', pm.response.headers.get('X-RateLimit-Limit'));",
+					"    console.log('Remaining:', pm.response.headers.get('X-RateLimit-Remaining'));",
+					"    console.log('Reset:', pm.response.headers.get('X-RateLimit-Reset'));",
+					"}",
+					"",
+					"// Basic response validation",
+					"pm.test('Response has valid JSON', function () {",
+					"    pm.response.to.have.header('Content-Type');",
+					"    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+					"});"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://api.labelmint.it/v1",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "",
+			"type": "string",
+			"description": "Your API key"
+		},
+		{
+			"key": "apiSecret",
+			"value": "",
+			"type": "string",
+			"description": "Your API secret for signing requests"
+		},
+		{
+			"key": "projectId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "taskId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"description": "API key management and authentication setup",
+			"item": [
+				{
+					"name": "Create API Key",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('API key created successfully', function() {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"// Save the created API key for future requests",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.key && response.key.key) {",
+									"        pm.collectionVariables.set('apiKey', response.key.key);",
+									"        console.log('API key saved:', response.key.key);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test Key - {{randomText}}\",\n  \"permissions\": [\"read\", \"write\"],\n  \"description\": \"Test API key for Postman collection\",\n  \"rate_limit\": {\n    \"requests\": 1000,\n    \"window\": 60\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/keys",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys"
+							]
+						},
+						"description": "Create a new API key for authentication. Save the key securely as it won't be shown again."
+					},
+					"response": []
+				},
+				{
+					"name": "List API Keys",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/keys",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys"
+							]
+						},
+						"description": "List all API keys associated with your account."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Authentication",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Authentication successful', function() {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/keys",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"keys"
+							]
+						},
+						"description": "Test if your authentication credentials are working correctly."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Projects",
+			"description": "Project management operations",
+			"item": [
+				{
+					"name": "Create Project",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Project created successfully', function() {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"// Save project ID for future requests",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.project && response.project.id) {",
+									"        pm.collectionVariables.set('projectId', response.project.id.toString());",
+									"        console.log('Project ID saved:', response.project.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test Project - Image Classification\",\n  \"description\": \"Test project for classifying images as spam or not spam\",\n  \"type\": \"image\",\n  \"categories\": [\"spam\", \"not_spam\"],\n  \"config\": {\n    \"instructions\": \"Classify each image as spam or not spam based on content\",\n    \"guidelines\": [\n      \"Look for promotional content\",\n      \"Check for suspicious elements\",\n      \"Verify image authenticity\"\n    ],\n    \"required_accuracy\": 0.9,\n    \"quality_check\": {\n      \"enabled\": true,\n      \"sample_rate\": 0.1\n    },\n    \"payment\": {\n      \"per_label\": 0.04,\n      \"currency\": \"USD\"\n    }\n  },\n  \"webhooks\": {\n    \"task_completed\": \"https://your-webhook-url.com/task-completed\",\n    \"project_completed\": \"https://your-webhook-url.com/project-completed\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/projects",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"projects"
+							]
+						},
+						"description": "Create a new labeling project with specified categories and configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "List Projects",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"projects"
+							]
+						},
+						"description": "List all projects with optional filtering by status or type."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Project Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"projects",
+								"{{projectId}}"
+							]
+						},
+						"description": "Get detailed information about a specific project including statistics."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Project",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"active\",\n  \"description\": \"Updated project description\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/projects/{{projectId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"projects",
+								"{{projectId}}"
+							]
+						},
+						"description": "Update project configuration or status."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Tasks",
+			"description": "Task management operations",
+			"item": [
+				{
+					"name": "Create Single Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Task created successfully', function() {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"// Save task ID for future requests",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.task && response.task.id) {",
+									"        pm.collectionVariables.set('taskId', response.task.id);",
+									"        console.log('Task ID saved:', response.task.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": {{projectId}},\n  \"data\": {\n    \"type\": \"image\",\n    \"image_url\": \"https://example.com/test-image.jpg\",\n    \"metadata\": {\n      \"source\": \"test\",\n      \"timestamp\": \"2024-01-15T10:30:00Z\"\n    }\n  },\n  \"priority\": \"normal\",\n  \"expires_in\": 86400\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks"
+							]
+						},
+						"description": "Create a single labeling task."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Text Task",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": {{projectId}},\n  \"data\": {\n    \"type\": \"text\",\n    \"text\": \"This is a sample text message that needs to be classified as spam or not spam.\",\n    \"language\": \"en\",\n    \"metadata\": {\n      \"source\": \"telegram\",\n      \"user_id\": \"12345\"\n    }\n  },\n  \"priority\": \"high\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks"
+							]
+						},
+						"description": "Create a text classification task."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Batch Tasks",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": {{projectId}},\n  \"tasks\": [\n    {\n      \"type\": \"text\",\n      \"text\": \"Sample text 1 for classification\",\n      \"metadata\": {\"batch_id\": \"batch_001\"}\n    },\n    {\n      \"type\": \"text\",\n      \"text\": \"Sample text 2 for classification\",\n      \"metadata\": {\"batch_id\": \"batch_001\"}\n    },\n    {\n      \"type\": \"image\",\n      \"image_url\": \"https://example.com/image1.jpg\",\n      \"metadata\": {\"batch_id\": \"batch_001\"}\n    }\n  ],\n  \"webhook_url\": \"https://your-webhook-url.com/batch-completed\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/tasks/batch",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks",
+								"batch"
+							]
+						},
+						"description": "Create multiple tasks in a single batch request."
+					},
+					"response": []
+				},
+				{
+					"name": "List Tasks",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tasks?project_id={{projectId}}&status=pending&limit=20&offset=0",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks"
+							],
+							"query": [
+								{
+									"key": "project_id",
+									"value": "{{projectId}}",
+									"description": "Filter by project ID"
+								},
+								{
+									"key": "status",
+									"value": "pending",
+									"description": "Filter by status"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Number of items per page"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Number of items to skip"
+								}
+							]
+						},
+						"description": "List tasks with optional filtering and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tasks/{{taskId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks",
+								"{{taskId}}"
+							]
+						},
+						"description": "Get detailed information about a specific task including results if completed."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Task",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/tasks/{{taskId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"tasks",
+								"{{taskId}}"
+							]
+						},
+						"description": "Delete a task (only possible if not started)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "AI Tasks",
+			"description": "AI-powered task operations",
+			"item": [
+				{
+					"name": "Create AI-Powered Task",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_id\": {{projectId}},\n  \"data\": {\n    \"type\": \"image\",\n    \"image_url\": \"https://example.com/test-image.jpg\"\n  },\n  \"ai_config\": {\n    \"model\": \"gpt-4-vision\",\n    \"confidence_threshold\": 0.8,\n    \"enable_human_verification\": true\n  },\n  \"priority\": \"high\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/aiTasks",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"aiTasks"
+							]
+						},
+						"description": "Create a task with AI pre-labeling for faster processing."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Analytics",
+			"description": "Analytics and reporting operations",
+			"item": [
+				{
+					"name": "Get Analytics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/analytics?start_date=2024-01-01T00:00:00Z&end_date=2024-01-31T23:59:59Z&project_id={{projectId}}&metrics=tasks_completed,accuracy,cost",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"analytics"
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01T00:00:00Z",
+									"description": "Start date for analytics period"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-01-31T23:59:59Z",
+									"description": "End date for analytics period"
+								},
+								{
+									"key": "project_id",
+									"value": "{{projectId}}",
+									"description": "Filter by project ID"
+								},
+								{
+									"key": "metrics",
+									"value": "tasks_completed,accuracy,cost",
+									"description": "Specific metrics to retrieve"
+								}
+							]
+						},
+						"description": "Retrieve analytics data for your projects and tasks."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Webhooks",
+			"description": "Webhook configuration and management",
+			"item": [
+				{
+					"name": "Configure Webhook",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://your-webhook-url.com/labelmint-events\",\n  \"events\": [\"task.completed\", \"project.completed\", \"payment.processed\"],\n  \"secret\": \"your-webhook-secret-key-16-chars\",\n  \"active\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/webhooks",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"webhooks"
+							]
+						},
+						"description": "Configure webhook URLs to receive real-time notifications."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

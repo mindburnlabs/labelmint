@@ -1,0 +1,530 @@
+# AWS WAF Configuration for DeligeIT
+
+# AWS WAFv2 WebACL
+Resources:
+  DeligeITWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: deligeit-waf
+      Scope: CLOUDFRONT  # or REGIONAL
+      DefaultAction:
+        Allow: {}
+
+      # Custom Response for blocked requests
+      CustomResponseBody: {
+        Content: |-
+          {
+            "error": "Access Blocked",
+            "message": "Your request has been blocked by our security system",
+            "requestId": "${waf.requestid}"
+          }
+      CustomResponseCode: 403
+
+      # Define rules
+      Rules:
+        # Rate Limiting Rule
+        - Name: RateLimitRule
+          Priority: 1
+          Statement:
+            - RateBasedStatement:
+                Limit: 2000  # 2000 requests per 5 minutes
+                AggregateKeyType: IP  # Rate limit per IP
+                ScopeDownMethod: None  # No scope down
+                ForwardedIPConfig:
+                  HeaderName: X-Forwarded-For
+                  FallbackBehavior: MATCH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # SQL Injection Rule
+        - Name: SQLInjectionRule
+          Priority: 2
+          Statement:
+            - SqliMatchStatement:
+                FieldToMatch:
+                  - Body: {}
+                  - QueryString: {}
+                  - SingleHeader:
+                      Name: Cookie
+                  - SingleHeader:
+                      Name: Authorization
+                TextTransformations:
+                  - URL_DECODE
+                  - HTML_ENTITY_DECODE
+                SensitivityLevel: HIGH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # XSS Protection Rule
+        - Name: XSSProtectionRule
+          Priority: 3
+          Statement:
+            - XssMatchStatement:
+                FieldToMatch:
+                  - Body: {}
+                  - QueryString: {}
+                  - AllQueryArguments: {}
+                TextTransformations:
+                  - URL_DECODE
+                  - HTML_ENTITY_DECODE
+                  - LOWERCASE
+                SensitivityLevel: HIGH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # Path Traversal Rule
+        - Name: PathTraversalRule
+          Priority: 4
+          Statement:
+            - ByteMatchStatement:
+                FieldToMatch:
+                  - UriPath: {}
+                SearchString: "../"
+                PositionalConstraint: CONTAINS
+                TextTransformations:
+                  - URL_DECODE
+                  - LOWERCASE
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # IP Blacklist Rule
+        - Name: IPBlacklistRule
+          Priority: 5
+          Statement:
+            - IPSetReferenceStatement:
+                ARN: !Ref BlacklistedIPSet
+                IPSetForwardedIPConfig:
+                  HeaderName: X-Forwarded-For
+                  FallbackBehavior: MATCH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # Geographic Blocking Rule
+        - Name: GeoBlockRule
+          Priority: 6
+          Statement:
+            - GeoMatchStatement:
+                CountryCodes:
+                  - CN  # China
+                  - RU  # Russia
+                  - KP  # North Korea
+                  - IR  # Iran
+                ForwardedIPConfig:
+                  HeaderName: X-Forwarded-For
+                  FallbackBehavior: NO_MATCH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # Size Constraint Rule
+        - Name: SizeConstraintRule
+          Priority: 7
+          Statement:
+            - SizeConstraintStatement:
+                FieldToMatch:
+                  - Body: {}
+                ComparisonOperator: GT
+                Size: 10485760  # 10MB
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # User-Agent Block Rule
+        - Name: UserAgentBlockRule
+          Priority: 8
+          Statement:
+            - ByteMatchStatement:
+                FieldToMatch:
+                  - SingleHeader:
+                      Name: User-Agent
+                SearchString:
+                  - sqlmap
+                  - nmap
+                  - nikto
+                  - dirb
+                  - gobuster
+                  - burpsuite
+                PositionalConstraint: CONTAINS
+                TextTransformations:
+                  - LOWERCASE
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # Known Vulnerability Exploits
+        - Name: KnownExploitsRule
+          Priority: 9
+          Statement:
+            - ByteMatchStatement:
+                FieldToMatch:
+                  - UriPath: {}
+                  - AllQueryArguments: {}
+                SearchString:
+                  - /wp-admin/
+                  - /phpmyadmin/
+                  - /xmlrpc.php
+                  - /.env
+                  - /.git/
+                  - /.svn/
+                PositionalConstraint: CONTAINS
+                TextTransformations:
+                  - URL_DECODE
+                  - LOWERCASE
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        # Allowlist Rule (highest priority)
+        - Name: AllowlistRule
+          Priority: 10
+          Statement:
+            - IPSetReferenceStatement:
+                ARN: !Ref WhitelistedIPSet
+                IPSetForwardedIPConfig:
+                  HeaderName: X-Forwarded-For
+                  FallbackBehavior: MATCH
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+  # IP Sets
+  BlacklistedIPSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: deligeit-blacklist-ips
+      Description: "Blacklisted IP addresses"
+      IPAddressVersion: IPV4
+      Scope: CLOUDFRONT
+      Addresses:
+        - 192.0.2.0/24
+        - 203.0.113.0/24
+        # Add known malicious IPs here
+
+  WhitelistedIPSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: deligeit-whitelist-ips
+      Description: "Whitelisted IP addresses"
+      IPAddressVersion: IPV4
+      Scope: CLOUDFRONT
+      Addresses:
+        - 203.0.113.0/24  # Office IP range
+        - 198.51.100.0/24  # CI/CD IP range
+        - Add trusted partner IPs here
+
+  # Regex Pattern Sets
+  SQLInjectionPatternSet:
+    Type: AWS::WAFv2::RegexPatternSet
+    Properties:
+      Name: deligeit-sql-patterns
+      Description: "SQL injection patterns"
+      Scope: CLOUDFRONT
+      RegularExpressionList:
+        - "(\\b(UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER)\\b)"
+        - "(\\b(OR|AND)\\s+\\d+\\s*=\\s*\\d+\\b)"
+        - "(['\"]).*?((\\%27)|(')|(--))"
+        - "(?i)(exec(\\s|\\{)\\w+)"
+        - "(?i)(waitfor\\s+delay\\s+')"
+        - "(?i)(union\\s+select)"
+
+  XSSPatternSet:
+    Type: AWS::WAFv2::RegexPatternSet
+    Properties:
+      Name: deligeit-xss-patterns
+      Description: "XSS attack patterns"
+      Scope: CLOUDFRONT
+      RegularExpressionList:
+        - "<script[^>]*>.*?<\\/script>"
+        - "javascript:"
+        - "on\\w+\\s*="
+        - "<iframe[^>]*>"
+        - "<object[^>]*>"
+        - "<embed[^>]*>"
+        - "<svg[^>]*>on\\w+"
+        - "(<|%3C).*(>|%3E)"
+        - "(\\(|\\)|\\{|\\}|\\[|\\])"
+
+  PathTraversalPatternSet:
+    Type: AWS::WAFv2::RegexPatternSet
+    Properties:
+      Name: deligeit-path-traversal-patterns
+      Description: "Path traversal attack patterns"
+      Scope: CLOUDFRONT
+      RegularExpressionList:
+        - "\\.\\.[\\/\\\\]"
+        - "\\.\\.[\\/\\\\]\\.\\.[\\/\\\\]"
+        - "\\.\\.[\\/\\\\]\\.\\.[\\/\\\\]\\.[\\/\\\\]"
+        - "%2e%2f%2e"
+        - "%2e%5c%2e"
+        - "[\\/\\\\]\\.\\.[\\/\\\\]"
+        - "[\\/\\\\]\\.\\.[\\/\\\\]\\.\\.[\\/\\\\]"
+
+# Rule Groups
+  DeligeITCommonAttackRuleGroup:
+    Type: AWS::WAFv2::RuleGroup
+    Properties:
+      Name: deligeit-common-attacks
+      Description: "Common web attack rule group"
+      Scope: CLOUDFRONT
+      Rules:
+        - Name: SQLInjectionGroup
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            - SqliMatchStatement:
+                FieldToMatch:
+                  - AllQueryArguments: {}
+                  - Body: {}
+                  - Headers:
+                      - Cookie
+                      - Authorization
+                TextTransformations:
+                  - URL_DECODE
+                  - HTML_ENTITY_DECODE
+                SensitivityLevel: HIGH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+        - Name: XSSGroup
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            - XssMatchStatement:
+                FieldToMatch:
+                  - AllQueryArguments: {}
+                  - Body: {}
+                  - Headers:
+                      - Cookie
+                      - User-Agent
+                TextTransformations:
+                  - URL_DECODE
+                  - HTML_ENTITY_DECODE
+                  - JSHE_DECODE
+                SensitivityLevel: HIGH
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampleRequests:
+              Enabled: true
+              CloudWatchMetricsEnabled: true
+
+# WAF Metrics Configuration
+  WAFMetricsConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt DeligeITWebACL.Arn
+      LogDestinationConfigs:
+        - Destination:
+            KinesisDataFirehoseArn: !Ref WAFKinesisStream
+        RedactedFields:
+          - SingleHeader:
+              Name: Authorization
+          - SingleHeader:
+              Name: Cookie
+          - SingleHeader:
+              Name: X-API-Key
+
+# Logging with Kinesis Firehose
+  WAFKinesisStream:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      Name: deligeit-waf-logs
+      S3DestinationConfiguration:
+        BucketArn: !Ref WAFLogBucket
+        Prefix: waf-logs/
+        ErrorOutputPrefix: waf-errors/
+        BufferingHints:
+          SizeInMBs: 5
+          IntervalInSeconds: 300
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: /aws/waf/labelmintit
+          LogStreamName: waf-logs
+      ExtendedS3DestinationConfiguration:
+        ParquetConfiguration:
+          Enabled: true
+          Compression: SNAPPY
+
+# Log Bucket
+  WAFLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: deligeit-waf-logs
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      NotificationConfiguration:
+        CloudWatchConfigurations:
+          - Event: s3:ObjectCreated:*
+            LogGroupName: waf-s3-events
+            LogStreamName: waf-log-uploads
+
+# CloudWatch Alarms
+  HighRateLimitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: deligeit-waf-high-rate-limit
+      AlarmDescription: "WAF rate limit exceeded threshold"
+      AlarmActions:
+        - !Ref AlarmSNSTopic
+      MetricName: WAFV2AllowedRequests
+      Namespace: AWS/WAFV2
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  BlockedRequestsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: deligeit-waf-blocked-requests
+      AlarmDescription: "WAF blocked requests exceeded threshold"
+      AlarmActions:
+        - !Ref AlarmSNSTopic
+      MetricName: WAFV2BlockedRequests
+      Namespace: AWS/WAFV2
+      Statistic: Sum
+      Period: 60   # 1 minute
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+# SNS Topic for Alerts
+  AlarmSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: deligeit-waf-alerts
+      DisplayName: "DeligeIT WAF Alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: alerts@deligeit.com
+        - Protocol: https
+          Endpoint: https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+        - Protocol: sms
+          Endpoint: "+1234567890"
+          SubscriptionRoleArn: !Ref SNSSubscriptionRole
+
+# EventBridge for WAF Events
+  WAFEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: deligeit-waf-events
+      Description: "Process WAF events"
+      EventPattern:
+        source:
+          - aws.wafv2
+        detail-type:
+          - WAF Rule Group List Updated
+          - WAF Exceeded Rate Limit
+          - WAF Rule Group Configuration Change
+      Targets:
+        - Arn: !GetAtt WAFEventProcessorFunction.Arn
+          Id: WAFEventProcessor
+
+# Lambda for WAF Event Processing
+  WAFEventProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: deligeit-waf-event-processor
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Timeout: 300
+      Environment:
+        Variables:
+          SLACK_WEBHOOK: !Ref SlackWebhookURL
+          PAGERDUTY_KEY: !Ref PagerDutyKey
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            console.log('WAF Event:', JSON.stringify(event, null, 2));
+
+            // Send to Slack
+            if (process.env.SLACK_WEBHOOK) {
+              await fetch(process.env.SLACK_WEBHOOK, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: `WAF Alert: ${event['detail-type']}`,
+                  attachments: [{
+                    color: 'danger',
+                    text: JSON.stringify(event.detail, null, 2)
+                  }]
+                })
+              });
+            }
+
+            // Send to PagerDuty
+            if (process.env.PAGERDUTY_KEY) {
+              await fetch('https://events.pagerduty.com/v2/enqueue', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Token token=${process.env.PAGERDUTY_KEY}`
+                },
+                body: JSON.stringify({
+                  routing_key: process.env.PAGERDUTY_ROUTING_KEY,
+                  event_action: 'trigger',
+                  payload: {
+                    summary: `WAF Alert: ${event['detail-type']}`,
+                    source: 'WAF',
+                    severity: 'critical',
+                    custom_details: event.detail
+                  }
+                })
+              });
+            }
+          };
+      Role: !GetAtt WAFExecutionRole.Arn

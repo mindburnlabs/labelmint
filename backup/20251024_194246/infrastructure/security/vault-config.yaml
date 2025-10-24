@@ -1,0 +1,157 @@
+# Vault Configuration for LabelMint
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault
+data:
+  vault.hcl: |
+    ui = true
+
+    listener "tcp" {
+      address = "0.0.0.0:8200"
+      tls_disable = false
+      tls_cert_file = "/vault/tls/server.crt"
+      tls_key_file = "/vault/tls/server.key"
+    }
+
+    storage "consul" {
+      address = "consul:8500"
+      path = "vault/"
+    }
+
+    api_addr = "https://vault.vault.svc:8200"
+    cluster_addr = "https://vault.vault.svc:8201"
+
+    default_lease_ttl = "168h"
+    max_lease_ttl = "720h"
+
+    # Enable audit logging
+    audit "file" {
+      file_path = "/vault/logs/audit.log"
+      mode = "0640"
+      format = "json"
+    }
+
+    # Enable transit secrets engine for encryption
+    seal "transit" {
+      address = "http://transit.service.consul:8200"
+      key_name = "vault-seal-key"
+      mount_path = "transit"
+    }
+
+  policies.hcl: |
+    # LabelMint application policy
+    path "secret/data/labelmint/*" {
+      capabilities = ["read", "list"]
+    }
+
+    path "secret/data/labelmint/database/*" {
+      capabilities = ["read"]
+    }
+
+    path "secret/data/labelmint/tokens/*" {
+      capabilities = ["read", "update"]
+    }
+
+    path "pki_int/issue/labelmint" {
+      capabilities = ["update"]
+    }
+
+    path "transit/encrypt/labelmint" {
+      capabilities = ["update"]
+    }
+
+    path "transit/decrypt/labelmint" {
+      capabilities = ["update"]
+    }
+
+    # Monitoring policy
+    path "sys/health" {
+      capabilities = ["read", "sudo"]
+    }
+
+    path "sys/metrics" {
+      capabilities = ["read"]
+    }
+
+---
+# Secret for Vault initialization
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-unseal-keys
+  namespace: vault
+type: Opaque
+data:
+  # These should be populated after Vault initialization
+  # Use external secrets operator or sealed-secrets
+  key1: ""  # Base64 encoded
+  key2: ""  # Base64 encoded
+  key3: ""  # Base64 encoded
+  rootToken: ""  # Base64 encoded
+
+---
+# External secrets configuration
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+  namespace: labelmint
+spec:
+  provider:
+    vault:
+      server: "https://vault.vault.svc:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "labelmint"
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: labelmint-secrets
+  namespace: labelmint
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: labelmint-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: secret/data/labelmint/database
+        property: password
+    - secretKey: DB_USER
+      remoteRef:
+        key: secret/data/labelmint/database
+        property: username
+    - secretKey: REDIS_PASSWORD
+      remoteRef:
+        key: secret/data/labelmint/redis
+        property: password
+    - secretKey: JWT_SECRET
+      remoteRef:
+        key: secret/data/labelmint/auth
+        property: jwt-secret
+    - secretKey: TON_API_KEY
+      remoteRef:
+        key: secret/data/labelmint/tokens
+        property: ton-api-key
+    - secretKey: ETH_PRIVATE_KEY
+      remoteRef:
+        key: secret/data/labelmint/tokens
+        property: eth-private-key
+    - secretKey: MINIO_ACCESS_KEY
+      remoteRef:
+        key: secret/data/labelmint/minio
+        property: access-key
+    - secretKey: MINIO_SECRET_KEY
+      remoteRef:
+        key: secret/data/labelmint/minio
+        property: secret-key

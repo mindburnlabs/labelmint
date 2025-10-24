@@ -1,0 +1,12 @@
+packages:
+  # Apps
+  - 'apps/*'
+
+  # Services
+  - 'services/*'
+
+  # Shared packages
+  - 'packages/*'
+
+  # Config packages
+  - 'config/*'

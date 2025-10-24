@@ -1,0 +1,332 @@
+---
+# Horizontal Pod Autoscaler for CPU and Memory
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmintit-hpa
+  labels:
+    app: labelmintit
+    component: autoscaling
+  annotations:
+    autoscaling.alpha.kubernetes.io/metrics: "[{\"type\":\"Resource\",\"resource\":{\"name\":\"cpu\",\"target\":{\"type\":\"Utilization\",\"averageUtilization\":70}}},{\"type\":\"Resource\",\"resource\":{\"name\":\"memory\",\"target\":{\"type\":\"Utilization\",\"averageUtilization\":80}}}]"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmintit
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Min
+
+---
+# HPA for Custom Metrics (HTTP Requests per Second)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmintit-hpa-http
+  labels:
+    app: labelmintit
+    component: autoscaling-http
+  annotations:
+    metric-config.object.external-pro.querying.kubernetes.io/path: "/apis/custom.metrics.k8s.io/v1beta1/namespaces/*/pods/*/http_requests_per_second"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmintit
+  minReplicas: 3
+  maxReplicas: 50
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: http_requests_per_second
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 200
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+
+---
+# VPA (Vertical Pod Autoscaler) for Resource Recommendations
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: labelmintit-vpa
+  labels:
+    app: labelmintit
+    component: vpa
+  annotations:
+    vpa-update-mode: "Auto"
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmintit
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: labelmintit-app
+      maxAllowed:
+        cpu: 2000m
+        memory: 2Gi
+      minAllowed:
+        cpu: 200m
+        memory: 256Mi
+      controlledResources: ["cpu", "memory"]
+    - containerName: log-collector
+      maxAllowed:
+        cpu: 500m
+        memory: 256Mi
+      minAllowed:
+        cpu: 100m
+        memory: 64Mi
+
+---
+# Cluster Autoscaler Configuration (for AWS)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+    spec:
+      containers:
+      - image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.21.0
+        name: cluster-autoscaler
+        resources:
+          limits:
+            cpu: 100m
+            memory: 300Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        command:
+        - ./cluster-autoscaler
+        - --v=4
+        - --stderrthreshold=info
+        - --cloud-provider=aws
+        - --skip-nodes-with-local-storage=false
+        - --expander=least-waste
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/labelmintit
+        - --balance-similar-node-groups
+        - --skip-nodes-with-system-pods=false
+        - --max-nodes-total=100
+        - --nodegroup-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/labelmintit
+
+---
+# PodDisruptionBudgets (to ensure availability during node updates)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmintit-pdb-budget
+  labels:
+    app: labelmintit
+    component: pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmintit
+
+---
+# Additional PDB with percentage
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmintit-pdb-percent
+  labels:
+    app: labelmintit
+    component: pdb-percent
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: labelmintit
+
+---
+# Keda Scaler for Queue-based Autoscaling
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: labelmintit-redis-queue-scaler
+  labels:
+    app: labelmintit
+    component: keda-scaler
+spec:
+  scaleTargetRef:
+    name: labelmintit
+  minReplicaCount: 3
+  maxReplicaCount: 50
+  pollingInterval: 30
+  cooldownPeriod: 300
+  triggers:
+  - type: redis
+    metadata:
+      address: redis.default.svc.cluster.local:6379
+      listName: labelmintit:queue:processing
+      listLength: "10"
+      enableTLS: "false"
+  - type: cpu
+    metadata:
+      type: Utilization
+      value: "70"
+  - type: memory
+    metadata:
+      type: Utilization
+      value: "80"
+
+---
+# Keda ScaledJob for Background Jobs
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: labelmintit-background-job
+  labels:
+    app: labelmintit
+    component: background-job
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        containers:
+        - name: labelmintit-job
+          image: labelmintit/job:latest
+          envFrom:
+            - configMapRef:
+                name: labelmintit-config
+            - secretRef:
+                name: labelmintit-secrets
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+        restartPolicy: OnFailure
+  pollingInterval: 30
+  successfulJobsHistoryLimit: 100
+  failedJobsHistoryLimit: 100
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  triggers:
+  - type: redis
+    metadata:
+      address: redis.default.svc.cluster.local:6379
+      listName: labelmintit:queue:background
+      listLength: "5"
+      enableTLS: "false"
+
+---
+# Resource Quota for Namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: labelmintit-quota
+  labels:
+    app: labelmintit
+    component: quota
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    pods: "50"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    persistentvolumeclaims: "10"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+
+---
+# Limit Range for Namespace
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: labelmintit-limits
+  labels:
+    app: labelmintit
+    component: limits
+spec:
+  limits:
+  - default:
+      cpu: "1000m"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+      ephemeral-storage: "100Mi"
+    type: Container
+  - max:
+      cpu: "4000m"
+      memory: "8Gi"
+      ephemeral-storage: "10Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+      ephemeral-storage: "50Mi"
+    type: Container
+  - max:
+      storage: "100Gi"
+    min:
+      storage: "1Gi"
+    type: PersistentVolumeClaim
