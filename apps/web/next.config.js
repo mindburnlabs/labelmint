@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    optimizeCss: true,
     optimizePackageImports: ['@labelmint/ui', 'framer-motion', 'recharts', '@headlessui/react'],
   },
   turbopack: {

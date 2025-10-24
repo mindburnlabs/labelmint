@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Telegram, Github, Twitter, Mail, Zap, ArrowUp } from 'lucide-react'
+import { Send, Github, Twitter, Mail, Zap, ArrowUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -61,7 +61,7 @@ export default function Footer() {
             {/* Social Links */}
             <div className="flex space-x-4">
               <Button variant="ghost" size="icon" className="hover-scale">
-                <Telegram className="w-5 h-5" />
+                <Send className="w-5 h-5" />
                 <span className="sr-only">Telegram</span>
               </Button>
               <Button variant="ghost" size="icon" className="hover-scale">
