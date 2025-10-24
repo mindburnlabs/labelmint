@@ -7,7 +7,7 @@ This directory contains all the infrastructure configurations for LabelMint, inc
 ```
 infrastructure/
 ├── docker/              # Docker configurations and optimized Dockerfiles
-├── infrastructure/k8s/                 # Kubernetes manifests
+├── k8s/                 # Kubernetes manifests
 │   ├── deployments/     # Application deployments
 │   ├── services/        # Service definitions
 │   ├── ingress/         # Ingress and routing rules

@@ -236,7 +236,7 @@ You are the DevOps Specialist responsible for creating a world-class deployment 
 - .github/workflows/ (all workflow files)
 - Dockerfile.* (all Docker configurations)
 - docker-compose.*.yml
-- infrastructure/k8s/ (Kubernetes configurations)
+- k8s/ (Kubernetes configurations)
 - monitoring/ (Prometheus/Grafana configs)
 - scripts/ (deployment scripts)
 ```

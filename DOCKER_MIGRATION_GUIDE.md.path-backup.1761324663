@@ -12,7 +12,7 @@ This guide walks you through migrating from the current fragmented Docker infras
 mkdir -p backup/$(date +%Y%m%d)
 cp -r docker-compose*.yml backup/$(date +%Y%m%d)/
 cp -r infrastructure/ backup/$(date +%Y%m%d)/
-cp -r infrastructure/k8s/ backup/$(date +%Y%m%d)/
+cp -r k8s/ backup/$(date +%Y%m%d)/
 cp .env* backup/$(date +%Y%m%d)/
 ```
 
@@ -128,8 +128,8 @@ mv infrastructure/monitoring/prometheus.yml/prometheus.yml archive/monitoring/
 1. **Merge K8s Configurations:**
 ```bash
 # Archive old configurations
-mv infrastructure/infrastructure/k8s/ archive/k8s-infrastructure/
-# Keep the better structured /infrastructure/k8s/ directory
+mv infrastructure/k8s/ archive/k8s-infrastructure/
+# Keep the better structured /k8s/ directory
 ```
 
 2. **Update Ingress Configurations:**

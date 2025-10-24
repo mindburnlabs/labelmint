@@ -5,7 +5,7 @@ This directory contains Kubernetes manifests for deploying the DeligateIT applic
 ## Directory Structure
 
 ```
-infrastructure/k8s/
+k8s/
 ├── base/                      # Base manifests
 │   ├── deployment.yaml        # Application deployment (3 replicas)
 │   ├── service.yaml          # LoadBalancer and internal services
@@ -79,7 +79,7 @@ Sensitive data is managed through Kubernetes Secrets:
 
 1. Create a secrets file with your values:
 ```bash
-cp infrastructure/k8s/base/secrets.yaml infrastructure/k8s/base/secrets-production.yaml
+cp k8s/base/secrets.yaml k8s/base/secrets-production.yaml
 ```
 
 2. Encode your secrets:
@@ -89,7 +89,7 @@ echo -n 'your-secret' | base64
 
 3. Apply the secrets:
 ```bash
-kubectl apply -f infrastructure/k8s/base/secrets-production.yaml
+kubectl apply -f k8s/base/secrets-production.yaml
 ```
 
 ## Features
@@ -147,7 +147,7 @@ To enable canary deployments:
 
 1. Create canary overlay:
 ```bash
-mkdir -p infrastructure/k8s/overlays/canary
+mkdir -p k8s/overlays/canary
 ```
 
 2. Configure with Argo Rollouts or Flagger
@@ -162,7 +162,7 @@ mkdir -p infrastructure/k8s/overlays/canary
 kubectl set image deployment/deligateit deligateit-app=deligateit/app:v2.0.0 -n production
 
 # Or use Kustomize
-cd infrastructure/k8s/overlays/production
+cd k8s/overlays/production
 kustomize edit set image deligateit/app=deligateit/app:v2.0.0
 kubectl apply -k .
 ```
@@ -202,7 +202,7 @@ kubectl get svc -n production
 
 1. Create new overlay directory:
 ```bash
-mkdir -p infrastructure/k8s/overlays/development
+mkdir -p k8s/overlays/development
 ```
 
 2. Create kustomization.yaml:
@@ -244,7 +244,7 @@ To add custom metrics for HPA:
 - name: Deploy to Kubernetes
   run: |
     echo "::set-output name=kubectl-version::$(kubectl version --short --client)"
-    kubectl apply -k infrastructure/k8s/overlays/${{ env.ENVIRONMENT }}
+    kubectl apply -k k8s/overlays/${{ env.ENVIRONMENT }}
     kubectl rollout status deployment/deligateit -n ${{ env.ENVIRONMENT }}
 ```
 

@@ -85,8 +85,8 @@ This document identifies critical infrastructure conflicts and consolidation opp
 ### Kubernetes Infrastructure Duplication
 
 #### Duplicate K8s Directories
-- **Primary**: `/infrastructure/k8s/` - 18 files, Kustomize-based structure
-- **Duplicate**: `/infrastructure/infrastructure/k8s/` - 11 files, legacy structure
+- **Primary**: `/k8s/` - 18 files, Kustomize-based structure
+- **Duplicate**: `/infrastructure/k8s/` - 11 files, legacy structure
 
 **Conflicts**:
 - Different naming conventions
@@ -132,7 +132,7 @@ This document identifies critical infrastructure conflicts and consolidation opp
 ├── infrastructure/
 │   ├── docker/ (removed - merged to main)
 │   ├── monitoring/ (consolidated configs)
-│   ├── infrastructure/k8s/ (consolidated from both locations)
+│   ├── k8s/ (consolidated from both locations)
 │   ├── terraform/
 │   └── security/
 └── apps/
@@ -188,8 +188,8 @@ This document identifies critical infrastructure conflicts and consolidation opp
 
 ### Phase 4: Kubernetes Consolidation (Week 4)
 1. **Merge K8s Directories**
-   - Consolidate `/infrastructure/k8s/` and `/infrastructure/infrastructure/k8s/`
-   - Adopt Kustomize-based structure from `/infrastructure/k8s/`
+   - Consolidate `/k8s/` and `/infrastructure/k8s/`
+   - Adopt Kustomize-based structure from `/k8s/`
    - Remove legacy configurations
 
 2. **Standardize Resource Naming**

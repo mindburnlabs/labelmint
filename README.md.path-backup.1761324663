@@ -60,7 +60,7 @@ labelmint/
 │   └── clients/           # API clients
 └── infrastructure/         # DevOps and deployment
     ├── docker/            # Docker configurations
-    ├── infrastructure/k8s/               # Kubernetes manifests
+    ├── k8s/               # Kubernetes manifests
     └── monitoring/        # Observability stack
 ```
 
