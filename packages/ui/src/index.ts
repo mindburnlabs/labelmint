@@ -136,16 +136,47 @@ export { cn } from './lib/utils';
 // Accessibility
 export * from './lib/accessibility';
 
-// Re-export commonly used third-party components
-export * from '@radix-ui/react-dialog';
-export * from '@radix-ui/react-dropdown-menu';
-export * from '@radix-ui/react-toast';
-export * from '@radix-ui/react-tooltip';
-export * from '@radix-ui/react-select';
-export * from '@radix-ui/react-checkbox';
-export * from '@radix-ui/react-switch';
-export * from '@radix-ui/react-tabs';
-export * from '@radix-ui/react-progress';
-export * from '@radix-ui/react-slider';
-export * from '@radix-ui/react-avatar';
-export * from '@radix-ui/react-label';
+// Re-export commonly used third-party components (simplified to avoid conflicts)
+export {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogTrigger,
+  DialogClose,
+  DialogTitle,
+  DialogDescription,
+} from '@radix-ui/react-dialog';
+
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuPortal,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@radix-ui/react-dropdown-menu';
+
+export {
+  Toast,
+  ToastProvider,
+  ToastViewport,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+} from '@radix-ui/react-toast';
+
+export {
+  TooltipProvider,
+} from '@radix-ui/react-tooltip';
+
+export {
+  Select,
+  SelectGroup,
+  SelectValue,
+  SelectTrigger,
+  SelectContent,
+  SelectLabel,
+  SelectItem,
+  SelectSeparator,
+} from '@radix-ui/react-select';
