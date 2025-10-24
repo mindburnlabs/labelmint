@@ -2,58 +2,58 @@
 // ================
 // Setup for unit tests - no external dependencies
 
-import { jest } from '@jest/globals'
+import { vi } from 'vitest'
 
 // Mock all external dependencies for unit tests
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
     auth: {
-      getUser: jest.fn(),
-      signIn: jest.fn(),
-      signOut: jest.fn(),
+      getUser: vi.fn(),
+      signIn: vi.fn(),
+      signOut: vi.fn(),
     },
-    from: jest.fn(() => ({
-      select: jest.fn().mockResolvedValue({ data: [], error: null }),
-      insert: jest.fn().mockResolvedValue({ data: {}, error: null }),
-      update: jest.fn().mockResolvedValue({ data: {}, error: null }),
-      delete: jest.fn().mockResolvedValue({ data: {}, error: null }),
+    from: vi.fn(() => ({
+      select: vi.fn().mockResolvedValue({ data: [], error: null }),
+      insert: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      update: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      delete: vi.fn().mockResolvedValue({ data: {}, error: null }),
     })),
   })),
 }))
 
-jest.mock('redis', () => ({
-  createClient: jest.fn(() => ({
-    connect: jest.fn().mockResolvedValue(true),
-    disconnect: jest.fn().mockResolvedValue(true),
-    get: jest.fn().mockResolvedValue(null),
-    set: jest.fn().mockResolvedValue('OK'),
-    del: jest.fn().mockResolvedValue(1),
-    exists: jest.fn().mockResolvedValue(0),
+vi.mock('redis', () => ({
+  createClient: vi.fn(() => ({
+    connect: vi.fn().mockResolvedValue(true),
+    disconnect: vi.fn().mockResolvedValue(true),
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue('OK'),
+    del: vi.fn().mockResolvedValue(1),
+    exists: vi.fn().mockResolvedValue(0),
   })),
 }))
 
 // Mock next/navigation
-jest.mock('next/navigation', () => ({
-  useRouter: jest.fn(() => ({
-    push: jest.fn(),
-    replace: jest.fn(),
-    prefetch: jest.fn(),
-    back: jest.fn(),
-    forward: jest.fn(),
-    refresh: jest.fn(),
+vi.mock('next/navigation', () => ({
+  useRouter: vi.fn(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
   })),
-  useSearchParams: jest.fn(() => new URLSearchParams()),
-  usePathname: jest.fn(() => '/'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
+  usePathname: vi.fn(() => '/'),
 }))
 
 // Mock next-auth
-jest.mock('next-auth/react', () => ({
-  useSession: jest.fn(() => ({
+vi.mock('next-auth/react', () => ({
+  useSession: vi.fn(() => ({
     data: null,
     status: 'unauthenticated',
   })),
-  signIn: jest.fn(),
-  signOut: jest.fn(),
+  signIn: vi.fn(),
+  signOut: vi.fn(),
 }))
 
 // Global test environment for unit tests
@@ -64,5 +64,5 @@ process.env.REDIS_URL = 'redis://localhost:6380/1'
 
 // Reset mocks before each test
 beforeEach(() => {
-  jest.clearAllMocks()
+  vi.clearAllMocks()
 })
