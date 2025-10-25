@@ -33,6 +33,11 @@
       "types": "./dist/auth/index.d.ts",
       "import": "./dist/auth/index.mjs",
       "require": "./dist/auth/index.js"
+    },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "import": "./dist/observability/index.mjs",
+      "require": "./dist/observability/index.js"
     }
   },
   "files": [

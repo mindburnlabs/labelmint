@@ -1,4 +1,4 @@
-import { TonClient, Address } from '@ton/ton';
+import { TonClient, Address, internal } from '@ton/ton';
 import { mnemonicToPrivateKey, keyPairFromSeed } from '@ton/crypto';
 import { WalletContractV4, WalletContractV3R2 } from '@ton/ton';
 import { fromNano, toNano, Cell, beginCell } from '@ton/core';
@@ -285,15 +285,64 @@ export class TonWalletStrategy implements PaymentStrategy {
   }): Promise<Transaction> {
     const { fromAddress, toAddress, amount, message } = params;
 
-    // Create transaction record
-    const txHash = this.generateTxHash();
+    // Get wallet info for sending
+    const wallet = await this.getUserWallet(fromAddress);
+    if (!wallet) {
+      throw new Error(`Sender wallet not found: ${fromAddress}`);
+    }
+
+    // Decrypt mnemonic to get wallet keys
+    const mnemonic = this.decryptMnemonic(wallet.mnemonic_encrypted);
+    const keyPair = await mnemonicToPrivateKey(mnemonic);
+
+    // Create wallet contract
+    const workchain = 0;
+    let walletContract;
+
+    if (wallet.wallet_version === 'v4R2') {
+      walletContract = WalletContractV4.create({ workchain, publicKey: keyPair.publicKey });
+    } else {
+      walletContract = WalletContractV3R2.create({ workchain, publicKey: keyPair.publicKey });
+    }
+
+    // Open wallet and check balance
+    const openedWallet = this.tonClient.open(walletContract);
+    const balance = await openedWallet.getBalance();
+
+    const transferAmount = BigInt(amount);
+    const estimatedFee = await this.estimateRealGasFee(fromAddress, toAddress, amount);
+
+    if (balance < transferAmount + estimatedFee) {
+      throw new Error(`Insufficient balance. Required: ${fromNano(transferAmount + estimatedFee)} TON, Available: ${fromNano(balance)} TON`);
+    }
+
+    // Create transfer
+    const seqno = await openedWallet.getSeqno();
+    const transfer = openedWallet.createTransfer({
+      seqno,
+      secretKey: keyPair.secretKey,
+      messages: [
+        internal({
+          to: Address.parse(toAddress),
+          value: transferAmount,
+          body: message ? beginCell().storeUint(0, 32).storeStringTail(message).endCell() : undefined,
+        })
+      ],
+    });
+
+    // Send transaction to blockchain
+    logger.info(`Sending TON transfer: ${fromAddress} -> ${toAddress}, amount: ${fromNano(transferAmount)} TON`);
+
+    const result = await this.tonClient.external(transfer);
+
+    // Create transaction record with real hash
     const transaction: Transaction = {
-      hash: txHash,
+      hash: result.toString(), // Real transaction hash
       fromAddress,
       toAddress,
-      amount: fromNano(amount),
+      amount: fromNano(transferAmount),
       tokenType: 'TON',
-      fee: '0',
+      fee: fromNano(estimatedFee),
       timestamp: new Date(),
       status: 'pending',
       message
@@ -302,9 +351,10 @@ export class TonWalletStrategy implements PaymentStrategy {
     // Record transaction in database
     await this.recordTransaction(transaction);
 
-    // Here you would implement the actual TON transaction sending logic
-    // For now, we'll simulate it
-    logger.info(`Simulating TON transfer: ${fromAddress} -> ${toAddress}, amount: ${amount}`);
+    // Update wallet balance in background
+    this.updateWalletBalance(wallet.user_id).catch(error => {
+      logger.error('Failed to update wallet balance:', error);
+    });
 
     return transaction;
   }
@@ -348,36 +398,108 @@ export class TonWalletStrategy implements PaymentStrategy {
     toAddress: string,
     amount: string
   ): Promise<bigint> {
-    // Basic fee estimation - in real implementation, use TON API
+    // Use more realistic gas fee estimation
     const baseFee = toNano('0.005'); // 0.005 TON base fee
     const storageFee = toNano('0.0001'); // Storage fee
-    return baseFee + storageFee;
+    const gasFee = toNano('0.006'); // Gas fee for message processing
+    const forwardFee = toNano('0.001'); // Forward fee
+    return baseFee + storageFee + gasFee + forwardFee;
+  }
+
+  /**
+   * Estimate real gas fee for transaction (detailed estimation)
+   */
+  private async estimateRealGasFee(
+    fromAddress: string,
+    toAddress: string,
+    amount: string
+  ): Promise<bigint> {
+    // Real-world gas fee estimation based on TON blockchain
+    const messageSize = 256; // Estimated message size in bytes
+    const transferAmount = BigInt(amount);
+
+    // Storage fees depend on account state and new contracts
+    const storageFee = toNano('0.0001');
+
+    // Gas fees for message processing (varies by complexity)
+    const gasFees = toNano('0.006');
+
+    // Forward fees depend on message size and destination
+    const forwardFees = BigInt(messageSize) * BigInt('1000'); // 1000 nanotons per byte
+
+    // Total fee calculation
+    const totalFee = storageFee + gasFees + forwardFees;
+
+    // Add a 20% buffer for network congestion
+    const buffer = totalFee * BigInt('20') / BigInt('100');
+
+    return totalFee + buffer;
   }
 
   /**
    * Generate mnemonic phrase
    */
   private async generateMnemonic(): Promise<string[]> {
-    // Implementation would use @ton/crypto mnemonic generation
-    return Array.from({ length: 24 }, (_, i) =>
-      ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract'][i % 7]
-    );
+    // Import mnemonic generation from @ton/crypto
+    const { mnemonicNew, mnemonicValidate } = await import('@ton/crypto');
+
+    // Generate a new 24-word mnemonic phrase
+    const mnemonic = await mnemonicNew(24);
+
+    // Validate the generated mnemonic
+    if (!await mnemonicValidate(mnemonic)) {
+      throw new Error('Generated mnemonic is invalid');
+    }
+
+    return mnemonic;
   }
 
   /**
    * Encrypt mnemonic for storage
    */
   private encryptMnemonic(mnemonic: string): string {
-    // Implementation would use encryption service
-    return Buffer.from(mnemonic).toString('base64');
+    const crypto = require('crypto');
+    const algorithm = 'aes-256-gcm';
+    const secretKey = process.env.MNEMONIC_ENCRYPTION_KEY || 'default-secret-key-change-in-production';
+    const key = crypto.scryptSync(secretKey, 'salt', 32);
+    const iv = crypto.randomBytes(16);
+
+    const cipher = crypto.createCipher(algorithm, key);
+    cipher.setAAD(Buffer.from('mnemonic'));
+
+    let encrypted = cipher.update(mnemonic, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted;
   }
 
   /**
    * Decrypt mnemonic
    */
   private decryptMnemonic(encryptedMnemonic: string): string[] {
-    // Implementation would use decryption service
-    const decrypted = Buffer.from(encryptedMnemonic, 'base64').toString();
+    const crypto = require('crypto');
+    const algorithm = 'aes-256-gcm';
+    const secretKey = process.env.MNEMONIC_ENCRYPTION_KEY || 'default-secret-key-change-in-production';
+    const key = crypto.scryptSync(secretKey, 'salt', 32);
+
+    const parts = encryptedMnemonic.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Invalid encrypted mnemonic format');
+    }
+
+    const iv = Buffer.from(parts[0], 'hex');
+    const authTag = Buffer.from(parts[1], 'hex');
+    const encrypted = parts[2];
+
+    const decipher = crypto.createDecipher(algorithm, key);
+    decipher.setAAD(Buffer.from('mnemonic'));
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
     return JSON.parse(decrypted);
   }
 

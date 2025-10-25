@@ -384,12 +384,13 @@ class Histogram {
 // Summary implementation
 class Summary {
   private name: string;
-  private values: Map<string, number[]> = new Map();
+  private values: Map<string, Array<{ value: number; timestamp: number }>> = new Map();
   private counts: Map<string, number> = new Map();
   private sums: Map<string, number> = new Map();
   private defaultLabels: Record<string, string>;
   private maxAge: number = 600000; // 10 minutes
   private ageBuckets: number = 5;
+  private lastCleanup: Map<string, number> = new Map();
 
   constructor(name: string, defaultLabels: Record<string, string>) {
     this.name = name;
@@ -398,48 +399,129 @@ class Summary {
 
   observe(value: number, labels?: Record<string, string>): void {
     const key = labels ? this.serializeLabels(labels) : '';
+    const now = Date.now();
 
+    // Initialize data structures for this key if needed
     if (!this.values.has(key)) {
       this.values.set(key, []);
       this.counts.set(key, 0);
       this.sums.set(key, 0);
+      this.lastCleanup.set(key, now);
     }
 
     const values = this.values.get(key)!;
-    const count = this.counts.get(key)!;
-    const sum = this.sums.get(key)!;
+    const lastCleanup = this.lastCleanup.get(key)!;
 
-    values.push(value);
-    this.counts.set(key, count + 1);
-    this.sums.set(key, sum + value);
+    // Add new value with timestamp
+    values.push({ value, timestamp: now });
 
-    // TODO: Implement sliding window based on maxAge and ageBuckets
+    // Cleanup old values periodically (every maxAge / ageBuckets)
+    if (now - lastCleanup > this.maxAge / this.ageBuckets) {
+      this.cleanupOldValues(key, now);
+      this.lastCleanup.set(key, now);
+    }
+
+    // Update aggregates
+    const recentValues = this.getRecentValues(key);
+    this.counts.set(key, recentValues.length);
+    this.sums.set(key, recentValues.reduce((sum, item) => sum + item.value, 0));
   }
 
-  getValue(): MetricValue {
+  /**
+   * Remove values older than maxAge from the sliding window
+   */
+  private cleanupOldValues(key: string, now: number): void {
+    const values = this.values.get(key);
+    if (!values) return;
+
+    const cutoff = now - this.maxAge;
+
+    // Filter out old values
+    const recentValues = values.filter(item => item.timestamp > cutoff);
+    this.values.set(key, recentValues);
+  }
+
+  /**
+   * Get values within the sliding window
+   */
+  private getRecentValues(key: string): Array<{ value: number; timestamp: number }> {
+    const values = this.values.get(key);
+    if (!values) return [];
+
+    const cutoff = Date.now() - this.maxAge;
+    return values.filter(item => item.timestamp > cutoff);
+  }
+
+  /**
+   * Configure sliding window parameters
+   */
+  setSlidingWindow(maxAge: number, ageBuckets: number): void {
+    this.maxAge = maxAge;
+    this.ageBuckets = Math.max(1, ageBuckets);
+  }
+
+  getValue(labels?: Record<string, string>): MetricValue {
+    const key = labels ? this.serializeLabels(labels) : '';
+    const recentValues = this.getRecentValues(key);
+
+    if (recentValues.length === 0) {
+      return {
+        name: this.name,
+        value: 0,
+        type: MetricType.SUMMARY,
+        labels: labels || this.defaultLabels
+      };
+    }
+
+    // Calculate summary statistics
+    const sortedValues = recentValues.map(item => item.value).sort((a, b) => a - b);
+    const count = sortedValues.length;
+    const sum = sortedValues.reduce((total, val) => total + val, 0);
+    const mean = sum / count;
+
+    // Calculate percentiles
+    const quantile = (p: number): number => {
+      const index = Math.ceil(p * count) - 1;
+      return sortedValues[Math.max(0, Math.min(index, count - 1))];
+    };
+
     return {
       name: this.name,
-      value: 0,
-      type: MetricType.SUMMARY
+      value: mean,
+      type: MetricType.SUMMARY,
+      labels: labels || this.defaultLabels,
+      metadata: {
+        count,
+        sum,
+        quantiles: {
+          '0.5': quantile(0.5),   // Median
+          '0.9': quantile(0.9),   // 90th percentile
+          '0.95': quantile(0.95), // 95th percentile
+          '0.99': quantile(0.99)  // 99th percentile
+        }
+      }
     };
   }
 
   toPrometheus(): string {
-    let output = `# HELP ${this.name} Summary\n`;
+    let output = `# HELP ${this.name} Summary with sliding window (${this.maxAge}ms)\n`;
     output += `# TYPE ${this.name} summary\n`;
 
-    for (const [labels, values] of this.values) {
+    for (const [labels, _] of this.values) {
+      const recentValues = this.getRecentValues(labels);
+      if (recentValues.length === 0) continue;
+
       const count = this.counts.get(labels) || 0;
       const sum = this.sums.get(labels) || 0;
       const labelStr = labels ? `{${labels}}` : '';
 
-      // Calculate quantiles
-      const sorted = [...values].sort((a, b) => a - b);
+      // Calculate quantiles from recent values in sliding window
+      const sortedValues = recentValues.map(item => item.value).sort((a, b) => a - b);
       const quantiles = [0.5, 0.9, 0.95, 0.99];
 
       quantiles.forEach(q => {
-        const index = Math.floor(q * sorted.length);
-        const value = sorted[index] || 0;
+        const index = Math.ceil(q * sortedValues.length) - 1;
+        const value = sortedValues[Math.max(0, Math.min(index, sortedValues.length - 1))];
         output += `${this.name}{quantile="${q}"${labelStr ? ', ' + labelStr : ''}} ${value}\n`;
       });
 

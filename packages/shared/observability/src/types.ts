@@ -201,6 +201,11 @@ export interface MetricValue {
   type?: MetricType;
   unit?: string;
   description?: string;
+  metadata?: {
+    count?: number;
+    sum?: number;
+    quantiles?: Record<string, number>;
+  };
 }
 
 export enum MetricType {
