@@ -1,0 +1,107 @@
+# Production Supabase Configuration for LabelMint Platform
+# Optimized for high performance, security, and scalability
+
+project_id = "labelmint-prod"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public", "storage", "auth", "realtime"]
+extra_search_path = ["public", "extensions"]
+max_rows = 10000
+# Production performance settings
+db_extra_search_path = "public, extensions"
+# Enable connection pooling
+pool_timeout = 30
+pool_ttl = 3600
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+# Production performance tuning
+shared_buffers = "256MB"
+effective_cache_size = "1GB"
+maintenance_work_mem = "64MB"
+checkpoint_completion_target = 0.9
+wal_buffers = "16MB"
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 200
+
+[studio]
+enabled = true
+port = 54323
+api_url = "https://api.labelmint.com"
+openai_api_key = ""  # Add if using AI features
+
+[storage]
+enabled = true
+file_size_limit = 104857600  # 100MB for production
+image_transformation_enabled = true
+storage_cdn_url = "https://cdn.labelmint.com"
+
+[auth]
+enabled = true
+site_url = "https://labelmint.com"
+additional_redirect_urls = [
+  "https://app.labelmint.com",
+  "https://admin.labelmint.com",
+  "https://api.labelmint.com",
+  "https://labelmint.app"  # Telegram Mini App
+]
+jwt_expiry = 7200  # 2 hours for production
+refresh_token_rotation_enabled = true
+security_update_password_require_reauthentication = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+otp_length = 6
+otp_exp = 3600  # 1 hour
+secure_password_reset_enabled = true
+max_frequency = "3s"
+
+[auth.external.google]
+enabled = true
+client_id = ""  # Set in production
+secret = ""     # Set in production
+
+[auth.external.github]
+enabled = true
+client_id = ""  # Set in production
+secret = ""     # Set in production
+
+[auth.external.telegram]
+enabled = true
+client_id = ""  # Set in production
+secret = ""     # Set in production
+
+# Real-time configuration for live collaboration
+[realtime]
+enabled = true
+max_concurrent_users = 5000
+throttle_publish_reconnect = 1000
+
+# Edge Runtime configuration
+[edge_runtime]
+enabled = true
+policy = "per_request"
+inspector_port = 8083
+
+# Logging configuration
+[log]
+level = "info"  # info for production, debug for development
+flavor = "prod"
+
+# Database pooler configuration for high availability
+[db.pooler]
+enabled = true
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 25
+max_client_conn = 100
+connection_timeout = 10
+idle_timeout = 300
+max_lifetime = 3600

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getAccessToken } from './lib/auth';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,8 +14,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for admin access token
-  const token = getAccessToken();
+  // Allow access to static assets
+  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
+    return NextResponse.next();
+  }
+
+  // Check for admin access token in cookies
+  const token = request.cookies.get('admin_access_token')?.value;
 
   if (!token && !pathname.startsWith('/auth')) {
     // Redirect to login if no token and not on auth page

@@ -1,90 +1,306 @@
 ---
-# Network policy for production
+# Production Network Policies for LabelMint Platform
+# Defense-in-Depth Network Security
+
+---
+# Main application network policy
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: labelmintit-netpol
+  name: labelmint-network-policy
+  namespace: production
   labels:
+    app: labelmint
+    component: security
     env: production
 spec:
   podSelector:
     matchLabels:
-      app: labelmintit
+      app: labelmint
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress
+
+  # Ingress Rules
   ingress:
+  # Allow ingress from Ingress Controller/Nginx
   - from:
     - namespaceSelector:
         matchLabels:
           name: ingress-nginx
+      - podSelector:
+          matchLabels:
+            app: ingress-nginx
     ports:
     - protocol: TCP
-      port: 3000
+      port: 3000  # Web App
+    - protocol: TCP
+      port: 3001  # Admin App
+    - protocol: TCP
+      port: 3101  # Labeling Backend
+    - protocol: TCP
+      port: 3103  # Payment Backend
+    - protocol: TCP
+      port: 3104  # API Gateway
+
+  # Allow ingress from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090  # Metrics
+    - protocol: TCP
+      port: 9091  # Metrics
+    - protocol: TCP
+      port: 9100  # Node Exporter
+    - protocol: TCP
+      port: 9121  # Redis Exporter
+    - protocol: TCP
+      port: 9187  # PostgreSQL Exporter
+
+  # Allow intra-namespace communication (LabelMint services)
   - from:
     - podSelector:
         matchLabels:
-          app: labelmintit
-    ports:
-    - protocol: TCP
-      port: 3000
-    - protocol: TCP
-      port: 9090
+          app: labelmint
+
+  # Egress Rules
   egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          name: kube-system
+  # Allow DNS resolution
+  - to: []
     ports:
-    - protocol: TCP
-      port: 53
     - protocol: UDP
       port: 53
-  - to:
-    - podSelector:
-        matchLabels:
-          app: postgres
-    ports:
     - protocol: TCP
-      port: 5432
-  - to:
-    - podSelector:
-        matchLabels:
-          app: redis
-    ports:
-    - protocol: TCP
-      port: 6379
+      port: 53
+
+  # Allow HTTPS outbound for external APIs
   - to: []
     ports:
     - protocol: TCP
       port: 443
+
+  # Allow HTTP outbound for specific external services
+  - to: []
+    ports:
     - protocol: TCP
       port: 80
 
----
-# Deny all ingress policy
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: deny-all-ingress
-  labels:
-    env: production
-    policy: deny-all
-spec:
-  podSelector: {}
-  policyTypes:
-  - Ingress
+  # Allow database access within namespace
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow Redis access within namespace
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow MinIO access within namespace
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: minio
+    ports:
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 9001
 
 ---
-# Deny all egress policy
+# Database-specific network policy
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: deny-all-egress
+  name: labelmint-postgres-network-policy
+  namespace: production
   labels:
+    app: labelmint
+    component: postgres
     env: production
-    policy: deny-all
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint
+      component: postgres
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Only allow from application services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: labeling-backend
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: payment-backend
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: api-gateway
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: admin
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  egress:
+  # Allow DNS and monitoring only
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Redis-specific network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: labelmint-redis-network-policy
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis
+    env: production
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint
+      component: redis
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Only allow from application services and bots
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: labeling-backend
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: payment-backend
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: api-gateway
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: client-bot
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: worker-bot
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  egress:
+  # Allow DNS only
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Bot services network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: labelmint-bots-network-policy
+  namespace: production
+  labels:
+    app: labelmint
+    component: bots
+    env: production
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint
+  matchExpressions:
+  - key: component
+    operator: In
+    values: ["client-bot", "worker-bot"]
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Allow from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow Telegram API access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow internal service communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+
+---
+# Deny all default network policy (defense-in-depth)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: labelmint-deny-all
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    env: production
 spec:
   podSelector: {}
   policyTypes:
-  - Egress
+    - Ingress
+    - Egress

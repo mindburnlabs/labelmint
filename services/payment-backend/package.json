@@ -36,6 +36,7 @@
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
     "nodemailer": "^6.9.16",
+    "node-telegram-bot-api": "^0.64.0",
     "bull": "^4.12.2",
     "stripe": "^17.6.0",
     "express-validator": "^7.0.1",
@@ -53,6 +54,7 @@
     "@types/node": "^20.10.0",
     "@types/compression": "^1.7.5",
     "@types/hpp": "^0.2.6",
+    "@types/node-telegram-bot-api": "^0.64.3",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

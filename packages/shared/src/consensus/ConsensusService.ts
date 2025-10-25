@@ -99,13 +99,17 @@ export class ConsensusService {
       // Create label object
       const label: Label = {
         id: this.generateLabelId(),
-        taskId: submission.taskId,
-        userId: submission.userId,
-        value: submission.value,
+        task_id: submission.taskId,
+        user_id: submission.userId,
+        type: 'text_classification' as any, // This should come from submission or task
+        data: {
+          type: 'text_classification' as any,
+          labels: [submission.value]
+        },
         confidence: submission.confidence,
-        timeSpent: submission.timeSpent,
-        createdAt: new Date(),
-        metadata: submission.metadata
+        time_spent: submission.timeSpent || 0,
+        created_at: new Date(),
+        updated_at: new Date()
       };
 
       // Store label
@@ -188,13 +192,17 @@ export class ConsensusService {
     for (const submission of submissions) {
       const label: Label = {
         id: this.generateLabelId(),
-        taskId: submission.taskId,
-        userId: submission.userId,
-        value: submission.value,
+        task_id: submission.taskId,
+        user_id: submission.userId,
+        type: 'text_classification' as any, // This should come from submission or task
+        data: {
+          type: 'text_classification' as any,
+          labels: [submission.value]
+        },
         confidence: submission.confidence,
-        timeSpent: submission.timeSpent,
-        createdAt: new Date(),
-        metadata: submission.metadata
+        time_spent: submission.timeSpent || 0,
+        created_at: new Date(),
+        updated_at: new Date()
       };
       labels.push(label);
       newLabels.push(label);
@@ -331,8 +339,7 @@ export class ConsensusService {
       await this.eventBus.publishTaskCreated(taskId, {
         projectId: 'unknown', // Would be populated from database
         taskType: 'unknown',
-        priority: 1,
-        isHoneypot
+        priority: 1
       });
     }
 

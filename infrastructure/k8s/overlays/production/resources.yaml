@@ -1,26 +1,50 @@
 ---
-# Production resource limits
+# Production resource limits for LabelMint Platform
 apiVersion: v1
 kind: LimitRange
 metadata:
-  name: labelmintit-prod-limits
+  name: labelmint-prod-limits
+  namespace: production
   labels:
+    app: labelmint
     env: production
 spec:
   limits:
+  # Default limits for most containers
   - default:
-      cpu: "2000m"
-      memory: "2Gi"
-      ephemeral-storage: "5Gi"
+      cpu: "1000m"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
     defaultRequest:
+      cpu: "250m"
+      memory: "256Mi"
+      ephemeral-storage: "500Mi"
+    type: Container
+  # Maximum limits for any container
+  - max:
+      cpu: "4000m"
+      memory: "4Gi"
+      ephemeral-storage: "10Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+      ephemeral-storage: "50Mi"
+    type: Container
+  # Large service limits (backend services)
+  - max:
+      cpu: "6000m"
+      memory: "8Gi"
+      ephemeral-storage: "20Gi"
+    min:
       cpu: "500m"
       memory: "512Mi"
       ephemeral-storage: "1Gi"
     type: Container
+  # Small service limits (bots, utilities)
   - max:
-      cpu: "4000m"
-      memory: "4Gi"
-      ephemeral-storage: "20Gi"
+      cpu: "1000m"
+      memory: "1Gi"
+      ephemeral-storage: "2Gi"
     min:
       cpu: "100m"
       memory: "128Mi"
@@ -28,43 +52,118 @@ spec:
     type: Container
 
 ---
-# Production resource quota
+# Production resource quota for LabelMint Platform
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: labelmintit-prod-quota
+  name: labelmint-prod-quota
+  namespace: production
   labels:
+    app: labelmint
     env: production
 spec:
   hard:
-    requests.cpu: "20"
-    requests.memory: "40Gi"
-    limits.cpu: "40"
-    limits.memory: "80Gi"
-    pods: "100"
-    services: "20"
-    secrets: "50"
-    configmaps: "50"
-    persistentvolumeclaims: "20"
-    services.loadbalancers: "5"
-    count/services.loadbalancers: "5"
+    requests.cpu: "50"
+    requests.memory: "100Gi"
+    limits.cpu: "100"
+    limits.memory: "200Gi"
+    pods: "200"
+    services: "50"
+    secrets: "100"
+    configmaps: "100"
+    persistentvolumeclaims: "50"
+    services.loadbalancers: "10"
+    count/services.loadbalancers: "10"
+    count/deployments.apps: "30"
+    count/replicasets.apps: "60"
 
 ---
-# Production node pool resource limits
+# Production database and storage resource quota
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: labelmintit-prod-node-pool-quota
+  name: labelmint-prod-storage-quota
+  namespace: production
   labels:
+    app: labelmint
+    component: storage
     env: production
-    component: node-pool
 spec:
-  scopeSelector:
-    matchExpressions:
-    - operator: In
-      values: ["production"]
   hard:
+    requests.storage: "500Gi"
+    persistentvolumeclaims: "20"
     requests.cpu: "10"
     requests.memory: "20Gi"
     limits.cpu: "20"
     limits.memory: "40Gi"
+
+---
+# Production monitoring resource quota
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: labelmint-prod-monitoring-quota
+  namespace: monitoring
+  labels:
+    app: labelmint
+    component: monitoring
+    env: production
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: "16Gi"
+    limits.cpu: "16"
+    limits.memory: "32Gi"
+    pods: "30"
+    services: "15"
+    secrets: "30"
+    configmaps: "30"
+
+---
+# Priority classes for LabelMint production workloads
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-critical
+  labels:
+    app: labelmint
+    env: production
+value: 1000
+globalDefault: false
+description: "Priority class for critical production services (API, databases)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-high
+  labels:
+    app: labelmint
+    env: production
+value: 800
+globalDefault: false
+description: "Priority class for high priority production services (web, processing)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-medium
+  labels:
+    app: labelmint
+    env: production
+value: 600
+globalDefault: false
+description: "Priority class for medium priority production services (bots, utilities)"
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: production-low
+  labels:
+    app: labelmint
+    env: production
+value: 400
+globalDefault: true
+description: "Priority class for low priority production services (monitoring, logging)"

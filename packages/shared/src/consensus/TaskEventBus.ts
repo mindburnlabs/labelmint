@@ -261,6 +261,7 @@ export class TaskEventBus extends EventEmitter {
       type: TaskEventType.TASK_SUBMITTED,
       taskId,
       userId,
+      timestamp: new Date(),
       data: {
         userId,
         label,
@@ -278,6 +279,7 @@ export class TaskEventBus extends EventEmitter {
     await this.publish({
       type: TaskEventType.TASK_COMPLETED,
       taskId,
+      timestamp: new Date(),
       data: {
         finalLabel,
         consensusScore: consensusResult?.confidence,

@@ -272,9 +272,9 @@ export interface ValidationRule {
   message?: string;
 }
 
-export interface FormValidation<T = unknown> {
+export type FormValidation<T = unknown> = {
   [K in keyof T]?: ValidationRule | ValidationRule[];
-}
+};
 
 // Grid system types
 export interface GridProps {

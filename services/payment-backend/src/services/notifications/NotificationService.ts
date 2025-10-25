@@ -1,5 +1,6 @@
 import { productionEmailService } from '../email/ProductionEmailService';
 import { Logger } from '../../utils/logger';
+import * as TelegramBot from 'node-telegram-bot-api';
 
 const logger = new Logger('NotificationService');
 
@@ -36,10 +37,41 @@ export interface SystemAlertData {
 export class NotificationService {
   private emailService = productionEmailService;
   private adminRecipients: NotificationRecipient[] = [];
+  private telegramBot: TelegramBot | null = null;
 
   constructor() {
     this.loadAdminRecipients();
     this.setupEmailTemplates();
+    this.initializeTelegramBot();
+  }
+
+  /**
+   * Initialize Telegram bot
+   */
+  private initializeTelegramBot(): void {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+
+    if (!botToken) {
+      logger.warn('TELEGRAM_BOT_TOKEN not configured, Telegram notifications disabled');
+      return;
+    }
+
+    try {
+      this.telegramBot = new TelegramBot(botToken, {
+        polling: false,
+        request: {
+          agentOptions: {
+            keepAlive: true,
+            timeout: 30000
+          }
+        }
+      });
+
+      logger.info('Telegram bot initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize Telegram bot', error);
+      this.telegramBot = null;
+    }
   }
 
   /**
@@ -190,13 +222,14 @@ export class NotificationService {
         if (recipient.email && recipient.channels.find(c => c.type === 'email')?.enabled) {
           await this.emailService.sendEmailImmediate({
             to: recipient.email,
+            subject: `🚨 Low Balance Alert - ${severity.toUpperCase()}`,
             template: 'low-balance-alert',
             data: templateData,
             priority: severity === 'critical' ? 'high' : 'normal'
           });
         }
 
-        // TODO: Add Telegram notification if enabled
+        // Send Telegram notification if enabled
         if (recipient.telegramId && recipient.channels.find(c => c.type === 'telegram')?.enabled) {
           await this.sendTelegramAlert(recipient.telegramId, alertData);
         }
@@ -222,7 +255,7 @@ export class NotificationService {
         await this.emailService.sendEmailImmediate({
           to: this.adminRecipients[0].email,
           subject: `[${alertData.severity.toUpperCase()}] LabelMint System Alert: ${alertData.type}`,
-          template: 'system-alert',
+          template: 'low-balance-alert', // Use existing template for now
           data: alertData,
           priority: alertData.severity === 'critical' ? 'high' : 'normal'
         });
@@ -235,14 +268,80 @@ export class NotificationService {
   }
 
   /**
-   * Send Telegram alert (placeholder for future implementation)
+   * Send Telegram alert for low balance warning
    */
   private async sendTelegramAlert(telegramId: string, alertData: LowBalanceAlertData): Promise<void> {
+    if (!this.telegramBot) {
+      logger.warn(`Telegram bot not available, skipping notification to ${telegramId}`);
+      return;
+    }
+
     try {
-      // TODO: Implement Telegram bot integration
-      logger.info(`Telegram alert would be sent to ${telegramId} (not yet implemented)`);
+      const severityEmoji = this.getSeverityEmoji(alertData.severity);
+      const severityText = alertData.severity.toUpperCase();
+
+      // Format wallet information for Telegram
+      const walletInfo = alertData.wallets.map(wallet => {
+        const balance = parseFloat(wallet.balance);
+        const threshold = parseFloat(wallet.threshold);
+        const percentage = ((balance / threshold) * 100).toFixed(1);
+
+        return `💳 *${wallet.currency} Wallet*
+📍 Address: \`${wallet.address.substring(0, 8)}...${wallet.address.slice(-6)}\`
+💰 Balance: ${balance} ${wallet.currency}
+⚠️ Threshold: ${threshold} ${wallet.currency}
+📊 Level: ${percentage}% of minimum`;
+      }).join('\n\n');
+
+      const message = `${severityEmoji} *LabelMint Payment Alert*
+
+🚨 *Low Balance Detected*
+📊 Severity: ${severityText}
+⏰ Time: ${alertData.timestamp.toLocaleString()}
+
+${walletInfo}
+
+🔗 [Admin Dashboard](${process.env.ADMIN_DASHBOARD_URL || 'https://admin.labelmint.it'}/payments)
+🔗 [Manage Wallets](${process.env.ADMIN_DASHBOARD_URL || 'https://admin.labelmint.it'}/wallets)
+
+⚡ *Immediate action required to prevent service disruption*`;
+
+      // Send message with Markdown formatting
+      await this.telegramBot.sendMessage(telegramId, message, {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '📊 Admin Dashboard', url: `${process.env.ADMIN_DASHBOARD_URL || 'https://admin.labelmint.it'}/payments` },
+              { text: '💳 Manage Wallets', url: `${process.env.ADMIN_DASHBOARD_URL || 'https://admin.labelmint.it'}/wallets` }
+            ]
+          ]
+        }
+      });
+
+      logger.info(`Telegram alert sent successfully to ${telegramId}`);
     } catch (error) {
-      logger.error('Failed to send Telegram alert', error);
+      // Handle common Telegram API errors
+      if (error.response?.body?.error_code === 403) {
+        logger.error(`Telegram bot blocked by user ${telegramId}`, error);
+      } else if (error.response?.body?.error_code === 400) {
+        logger.error(`Invalid Telegram user ID ${telegramId}`, error);
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET') {
+        logger.warn(`Telegram API timeout for user ${telegramId}, will retry later`);
+        // Retry logic could be implemented here
+      } else {
+        logger.error(`Failed to send Telegram alert to ${telegramId}`, error);
+      }
+
+      // Re-throw critical errors so they can be handled upstream
+      if (error.response?.body?.error_code === 429) {
+        // Rate limit error - this is temporary
+        logger.warn(`Telegram API rate limit exceeded for user ${telegramId}`);
+        throw new Error(`Telegram rate limit exceeded: ${error.response.body.description}`);
+      }
+
+      throw error;
     }
   }
 
@@ -270,6 +369,19 @@ export class NotificationService {
     if (avgPercentage < 0.3) return 'high';
     if (avgPercentage < 0.6) return 'medium';
     return 'low';
+  }
+
+  /**
+   * Get emoji for severity level
+   */
+  private getSeverityEmoji(severity: LowBalanceAlertData['severity']): string {
+    switch (severity) {
+      case 'critical': return '🚨';
+      case 'high': return '⚠️';
+      case 'medium': return '⚡';
+      case 'low': return 'ℹ️';
+      default: return '📢';
+    }
   }
 
   /**
@@ -323,6 +435,10 @@ export class NotificationService {
         emailService: {
           status: await this.emailService.healthCheck() ? 'healthy' : 'unhealthy',
           stats: emailStats
+        },
+        telegramService: {
+          status: this.telegramBot ? 'configured' : 'not_configured',
+          botToken: process.env.TELEGRAM_BOT_TOKEN ? 'set' : 'not_set'
         },
         adminRecipients: {
           count: this.adminRecipients.length,

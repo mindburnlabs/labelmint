@@ -20,14 +20,17 @@ import {
   SunIcon,
   Bars3Icon,
   XMarkIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
+import { GlassNavigation } from '@/components/ui/GlassNavigation';
+import { GlassCard } from '@/components/ui/GlassCard';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon, permission: 'dashboard' },
-  { name: 'Users', href: '/dashboard/users', icon: UsersIcon, permission: 'users' },
-  { name: 'Projects', href: '/dashboard/projects', icon: FolderIcon, permission: 'projects' },
+  { name: 'Users', href: '/dashboard/users', icon: UsersIcon, permission: 'users', badge: '24' },
+  { name: 'Projects', href: '/dashboard/projects', icon: FolderIcon, permission: 'projects', badge: '12' },
   { name: 'Finance', href: '/dashboard/finance', icon: CurrencyDollarIcon, permission: 'finance' },
-  { name: 'Disputes', href: '/dashboard/disputes', icon: ExclamationTriangleIcon, permission: 'disputes' },
+  { name: 'Disputes', href: '/dashboard/disputes', icon: ExclamationTriangleIcon, permission: 'disputes', badge: '3' },
   { name: 'Analytics', href: '/dashboard/analytics', icon: ChartBarIcon, permission: 'analytics' },
   { name: 'Settings', href: '/dashboard/settings', icon: CogIcon, permission: 'settings' },
 ];
@@ -60,15 +63,22 @@ export default function DashboardLayout({
   const filteredNavigation = navigation.filter((nav) => canAccess(user, nav.permission));
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-600/20 rounded-full blur-3xl animate-float" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-purple-400/20 to-pink-600/20 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-cyan-400/10 to-blue-600/10 rounded-full blur-3xl animate-pulse-slow" />
+      </div>
+
       {/* Mobile sidebar */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 flex flex-col w-72 bg-white dark:bg-gray-800 shadow-xl">
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
-            <Link href="/dashboard" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">LM</span>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-y-0 left-0 flex flex-col w-80 glass-card m-4 shadow-2xl">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-white/10">
+            <Link href="/dashboard" className="flex items-center space-x-3 group">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                <span className="text-white font-bold text-base">LM</span>
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -79,121 +89,87 @@ export default function DashboardLayout({
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-2 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 glass-nav-item hover:scale-110 transition-all duration-200"
             >
               <XMarkIcon className="h-5 w-5" />
             </button>
           </div>
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {filteredNavigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  pathname === item.href
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-                }`}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <item.icon className={`mr-3 h-5 w-5 flex-shrink-0 ${
-                  pathname === item.href
-                    ? 'text-blue-500 dark:text-blue-400'
-                    : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
-                }`} />
-                {item.name}
-                {pathname === item.href && (
-                  <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full"></div>
-                )}
-              </Link>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
-              <p className="text-sm font-medium">Need Help?</p>
-              <p className="text-xs opacity-90 mt-1">Check our documentation for guidance</p>
-              <button className="mt-3 w-full bg-white/20 hover:bg-white/30 transition-colors rounded px-3 py-1.5 text-xs font-medium">
+          <div className="flex-1 px-4 py-6 overflow-y-auto">
+            <GlassNavigation items={filteredNavigation} />
+          </div>
+          <div className="p-4 border-t border-white/10">
+            <GlassCard className="p-4 text-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center animate-bounce-slow">
+                <span className="text-white text-xl">?</span>
+              </div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">Need Help?</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">Check our documentation</p>
+              <button className="w-full glass-button text-sm">
                 View Docs
               </button>
-            </div>
+            </GlassCard>
           </div>
         </div>
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-72 lg:flex-col">
-        <div className="flex flex-col flex-grow bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="flex items-center h-16 px-6 border-b border-gray-200 dark:border-gray-700">
-            <Link href="/dashboard" className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">LM</span>
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-80 lg:flex-col">
+        <div className="flex flex-col flex-grow glass-card m-4 mr-0 rounded-r-2xl shadow-2xl">
+          <div className="flex items-center h-20 px-6 border-b border-white/10">
+            <Link href="/dashboard" className="flex items-center space-x-4 group">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                <span className="text-white font-bold text-lg">LM</span>
               </div>
               <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
                   LabelMint
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Admin Panel</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Premium Admin Panel</p>
               </div>
             </Link>
           </div>
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {filteredNavigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  pathname === item.href
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                <item.icon className={`mr-3 h-5 w-5 flex-shrink-0 ${
-                  pathname === item.href
-                    ? 'text-blue-500 dark:text-blue-400'
-                    : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-500 dark:group-hover:text-gray-400'
-                }`} />
-                {item.name}
-                {pathname === item.href && (
-                  <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full"></div>
-                )}
-              </Link>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
-              <p className="text-sm font-medium">Need Help?</p>
-              <p className="text-xs opacity-90 mt-1">Check our documentation for guidance</p>
-              <button className="mt-3 w-full bg-white/20 hover:bg-white/30 transition-colors rounded px-3 py-1.5 text-xs font-medium">
-                View Docs
+          <div className="flex-1 px-4 py-6 overflow-y-auto">
+            <GlassNavigation items={filteredNavigation} />
+          </div>
+          <div className="p-4 border-t border-white/10">
+            <GlassCard className="p-4 text-center hover:scale-105 transition-transform duration-300">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg animate-float">
+                <span className="text-white text-2xl">✨</span>
+              </div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Need Help?</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">Access comprehensive documentation and support</p>
+              <button className="w-full glass-button text-sm hover:scale-105 transition-transform duration-200">
+                View Documentation
               </button>
-            </div>
+            </GlassCard>
           </div>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-72">
-        {/* Top navigation */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
-          <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center space-x-4">
+      <div className="lg:pl-80 relative z-10">
+        {/* Premium glassmorphism header */}
+        <header className="sticky top-4 z-40 mx-4 mt-4 glass-card shadow-2xl">
+          <div className="flex items-center justify-between h-20 px-6">
+            <div className="flex items-center space-x-6">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="lg:hidden p-3 glass-nav-item hover:scale-110 transition-all duration-200"
               >
                 <Bars3Icon className="h-5 w-5" />
               </button>
 
-              {/* Search bar */}
+              {/* Enhanced search bar */}
               <div className="hidden md:flex items-center">
-                <div className="relative">
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl" />
                   <input
                     type="text"
-                    placeholder="Search..."
-                    className="w-64 lg:w-96 pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Search users, projects, analytics..."
+                    className="relative w-80 pl-12 pr-4 py-3 glass-nav-item rounded-2xl text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-300"
                   />
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
@@ -202,77 +178,89 @@ export default function DashboardLayout({
             </div>
 
             <div className="flex items-center space-x-4">
-              {/* Quick actions */}
-              <div className="hidden sm:flex items-center space-x-2">
-                <button className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              {/* Enhanced quick actions */}
+              <div className="hidden sm:flex items-center space-x-3">
+                <button className="glass-button text-sm hover:scale-105 transition-transform duration-200">
                   + New Project
                 </button>
-                <button className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                <button className="glass-button text-sm hover:scale-105 transition-transform duration-200">
                   + Add User
                 </button>
               </div>
 
-              {/* Theme toggle */}
+              {/* Premium theme toggle */}
               <button
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="p-2 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="p-3 glass-nav-item hover:scale-110 hover:rotate-12 transition-all duration-300 group"
               >
-                {theme === 'dark' ? (
-                  <SunIcon className="h-5 w-5" />
-                ) : (
-                  <MoonIcon className="h-5 w-5" />
-                )}
+                <div className="relative">
+                  {theme === 'dark' ? (
+                    <SunIcon className="h-5 w-5 group-hover:text-yellow-400 transition-colors duration-300" />
+                  ) : (
+                    <MoonIcon className="h-5 w-5 group-hover:text-blue-400 transition-colors duration-300" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-400 to-orange-400 rounded-full opacity-0 group-hover:opacity-20 blur-md transition-opacity duration-300" />
+                </div>
               </button>
 
-              {/* Notifications */}
+              {/* Enhanced Notifications */}
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative"
+                  className="p-3 glass-nav-item hover:scale-110 transition-all duration-200 relative group"
                 >
-                  <BellIcon className="h-5 w-5" />
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-gray-800"></span>
+                  <BellIcon className="h-5 w-5 group-hover:animate-bounce-slow" />
+                  <span className="absolute top-2 right-2 h-3 w-3 bg-gradient-to-r from-red-500 to-pink-500 rounded-full animate-pulse ring-2 ring-white dark:ring-gray-800"></span>
+                  <span className="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full animate-ping"></span>
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                  <div className="absolute right-0 mt-3 w-96 glass-card shadow-2xl animate-slide-in">
+                    <div className="p-4 border-b border-white/10 bg-gradient-to-r from-blue-500/10 to-purple-600/10">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                        <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Mark all read</span>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Notifications</h3>
+                        <button className="text-xs glass-badge hover:scale-105 transition-transform duration-200">
+                          Mark all read
+                        </button>
                       </div>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                        <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
+                      <div className="divide-y divide-white/5">
+                        <div className="p-4 hover:bg-white/5 transition-colors cursor-pointer group/item">
                           <div className="flex items-start space-x-3">
-                            <div className="h-8 w-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
-                              <UsersIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            <div className="h-10 w-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 group-hover/item:scale-110 transition-transform duration-200">
+                              <UsersIcon className="h-5 w-5 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover/item:text-blue-600 dark:group-hover/item:text-blue-400 transition-colors duration-200">
                                 New user registration
                               </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 John Doe joined as a worker
                               </p>
-                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">2 minutes ago</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-gray-500 dark:text-gray-500">2 minutes ago</span>
+                                <span className="glass-badge text-xs">New</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <div className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
+                        <div className="p-4 hover:bg-white/5 transition-colors cursor-pointer group/item">
                           <div className="flex items-start space-x-3">
-                            <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
-                              <CheckCircleIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <div className="h-10 w-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0 group-hover/item:scale-110 transition-transform duration-200">
+                              <CheckCircleIcon className="h-5 w-5 text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover/item:text-green-600 dark:group-hover/item:text-green-400 transition-colors duration-200">
                                 Project completed
                               </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 Image Classification for Acme Corp
                               </p>
-                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">5 minutes ago</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className="text-xs text-gray-500 dark:text-gray-500">5 minutes ago</span>
+                                <span className="glass-badge text-xs bg-green-500/20 text-green-600 dark:text-green-400">Success</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -282,50 +270,77 @@ export default function DashboardLayout({
                 )}
               </div>
 
-              {/* User menu */}
+              {/* Premium User Menu */}
               <div className="relative group">
-                <button className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium shadow-sm">
-                    {user.profile.firstName[0]}{user.profile.lastName[0]}
+                <button className="flex items-center space-x-3 p-3 glass-nav-item hover:scale-105 transition-all duration-200">
+                  <div className="relative">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shadow-lg group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                      {user.profile.firstName[0]}{user.profile.lastName[0]}
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800 animate-pulse"></div>
                   </div>
                   <div className="hidden sm:block text-left">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    <p className="text-sm font-bold text-gray-900 dark:text-white group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
                       {user.profile.firstName} {user.profile.lastName}
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize font-medium">
                       {user.role}
                     </p>
                   </div>
-                  <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4 text-gray-400 group-hover:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
 
-                {/* Dropdown menu */}
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                  <Link href="/dashboard/profile" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    Profile
-                  </Link>
-                  <Link href="/dashboard/settings" className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    Settings
-                  </Link>
-                  <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                  <button
-                    onClick={logout}
-                    className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    Sign out
-                  </button>
+                {/* Enhanced Dropdown Menu */}
+                <div className="absolute right-0 mt-3 w-56 glass-card shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 animate-slide-in">
+                  <div className="p-2">
+                    <Link href="/dashboard/profile" className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-200 group/item">
+                      <div className="h-8 w-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          {user.profile.firstName[0]}{user.profile.lastName[0]}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium">View Profile</p>
+                        <p className="text-xs text-gray-500">Manage your account</p>
+                      </div>
+                    </Link>
+                    <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-200">
+                      <div className="h-8 w-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                        <CogIcon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Settings</p>
+                        <p className="text-xs text-gray-500">Preferences and more</p>
+                      </div>
+                    </Link>
+                    <div className="border-t border-white/10 my-2"></div>
+                    <button
+                      onClick={logout}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-200 group/item"
+                    >
+                      <div className="h-8 w-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center group-hover/item:scale-110 transition-transform duration-200">
+                        <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium">Sign out</p>
+                        <p className="text-xs text-gray-500">See you later!</p>
+                      </div>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {children}
+        {/* Premium Page Content */}
+        <main className="flex-1 pb-8">
+          <div className="max-w-7xl mx-auto px-6 py-8">
+            <div className="glass-card p-8 animate-fade-in">
+              {children}
+            </div>
           </div>
         </main>
       </div>

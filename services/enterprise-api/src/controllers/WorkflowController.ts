@@ -299,7 +299,7 @@ export class WorkflowController {
   /**
    * Get workflow templates
    */
-  static async getTemplates(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getTemplates(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { category, search } = req.query
 
@@ -323,11 +323,15 @@ export class WorkflowController {
   /**
    * Create workflow from template
    */
-  static async createFromTemplate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async createFromTemplate(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { organizationId, templateId } = req.params
       const { name, description, config = {} } = req.body
-      const userId = req.user.id
+      const userId = WorkflowController.getUserId(req)
+
+      if (!(await WorkflowController.ensureWorkflowManager(req, res, organizationId))) {
+        return
+      }
 
       const workflow = await WorkflowBuilderService.createFromTemplate({
         templateId,
@@ -355,9 +359,11 @@ export class WorkflowController {
         createdBy: userId
       })
 
+      const detailed = await WorkflowService.getDetailedWorkflow(workflow.id, organizationId)
+
       res.status(201).json({
         success: true,
-        data: workflow
+        data: detailed ?? workflow
       })
     } catch (error) {
       logger.error('Failed to create workflow from template', {
@@ -371,11 +377,15 @@ export class WorkflowController {
   /**
    * Clone a workflow
    */
-  static async clone(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async clone(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { organizationId, workflowId } = req.params
       const { name, description } = req.body
-      const userId = req.user.id
+      const userId = WorkflowController.getUserId(req)
+
+      if (!(await WorkflowController.ensureWorkflowManager(req, res, organizationId))) {
+        return
+      }
 
       const clonedWorkflow = await WorkflowService.cloneWorkflow({
         sourceWorkflowId: workflowId,
@@ -384,14 +394,6 @@ export class WorkflowController {
         description,
         clonedBy: userId
       })
-
-      if (!clonedWorkflow) {
-        res.status(404).json({
-          success: false,
-          error: 'Source workflow not found'
-        })
-        return
-      }
 
       // Log audit event
       await AuditService.log({
@@ -410,11 +412,17 @@ export class WorkflowController {
         clonedBy: userId
       })
 
+      const detailed = await WorkflowService.getDetailedWorkflow(clonedWorkflow.id, organizationId)
+
       res.status(201).json({
         success: true,
-        data: clonedWorkflow
+        data: detailed ?? clonedWorkflow
       })
     } catch (error) {
+      if (error instanceof Error && error.message === 'Workflow not found') {
+        res.status(404).json({ success: false, error: error.message })
+        return
+      }
       logger.error('Failed to clone workflow', {
         organizationId: req.params.organizationId,
         workflowId: req.params.workflowId,
@@ -427,18 +435,18 @@ export class WorkflowController {
   /**
    * Export workflow
    */
-  static async export(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async export(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { organizationId, workflowId } = req.params
       const { format = 'json' } = req.query
 
-      const exportData = await WorkflowService.exportWorkflow({
-        workflowId,
-        organizationId,
-        format: format as 'json' | 'yaml'
-      })
+      if (!(await WorkflowController.ensureWorkflowManager(req, res, organizationId))) {
+        return
+      }
 
-      if (!exportData) {
+      const workflow = await WorkflowService.getDetailedWorkflow(workflowId, organizationId)
+
+      if (!workflow) {
         res.status(404).json({
           success: false,
           error: 'Workflow not found'
@@ -446,13 +454,25 @@ export class WorkflowController {
         return
       }
 
+      if (format === 'yaml') {
+        res.status(400).json({
+          success: false,
+          error: 'YAML export not supported'
+        })
+        return
+      }
+
       const filename = `workflow-${workflowId}.${format}`
 
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-      res.setHeader('Content-Type', format === 'yaml' ? 'application/yaml' : 'application/json')
+      res.setHeader('Content-Type', 'application/json')
 
-      res.send(exportData)
+      res.send(JSON.stringify(workflow, null, 2))
     } catch (error) {
+      if (error instanceof Error && error.message === 'Workflow not found') {
+        res.status(404).json({ success: false, error: error.message })
+        return
+      }
       logger.error('Failed to export workflow', {
         organizationId: req.params.organizationId,
         workflowId: req.params.workflowId,
@@ -465,11 +485,15 @@ export class WorkflowController {
   /**
    * Import workflow
    */
-  static async import(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async import(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { organizationId } = req.params
       const { workflow, name, description } = req.body
-      const userId = req.user.id
+      const userId = WorkflowController.getUserId(req)
+
+      if (!(await WorkflowController.ensureWorkflowManager(req, res, organizationId))) {
+        return
+      }
 
       const importedWorkflow = await WorkflowService.importWorkflow({
         workflowData: workflow,
@@ -500,6 +524,10 @@ export class WorkflowController {
         data: importedWorkflow
       })
     } catch (error) {
+      if (error instanceof Error && error.message === 'Workflow not found') {
+        res.status(404).json({ success: false, error: error.message })
+        return
+      }
       logger.error('Failed to import workflow', {
         organizationId: req.params.organizationId,
         error: error.message
@@ -546,17 +574,25 @@ export class WorkflowController {
       return false
     }
 
-    if (membership.role === 'OWNER' || membership.role === 'ADMIN') {
+    const role = typeof membership.role === 'string' ? membership.role.toLowerCase() : ''
+    if (role === 'owner' || role === 'admin') {
       return true
     }
 
-    const permissions = Array.isArray(membership.permissions)
-      ? membership.permissions
-      : Array.isArray((membership.permissions as any)?.workflow)
-      ? (membership.permissions as any).workflow
-      : []
+    const permissionSet = new Set<string>()
+    const collect = (value: any) => {
+      if (!value) return
+      if (Array.isArray(value)) {
+        value.forEach(collect)
+      } else if (typeof value === 'string') {
+        permissionSet.add(value)
+      } else if (typeof value === 'object') {
+        Object.values(value).forEach(collect)
+      }
+    }
+    collect(membership.permissions)
 
-    if (permissions.includes('workflow:manage') || permissions.includes('workflow:write')) {
+    if (permissionSet.has('workflow:manage') || permissionSet.has('workflow:write')) {
       return true
     }
 

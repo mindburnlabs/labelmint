@@ -2,8 +2,8 @@
 // API CLIENT
 // ============================================================================
 
-import { ApiResponse, ApiError } from '../types/api';
-import { AppError } from '../utils/error';
+import type { ApiResponse, ApiError } from '../types/api';
+import { AppError, createError } from '../utils/error';
 
 export interface ApiClientConfig {
   baseURL: string;
@@ -157,13 +157,14 @@ export class ApiClient {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          const error = new ApiError(
-            errorData.message || `HTTP ${response.status}: ${response.statusText}`,
-            errorData.code || `HTTP_${response.status}`,
-            response.status,
-            errorData.details
-          );
-          throw error;
+          const error: ApiError = {
+            code: (errorData as any)?.code || `HTTP_${response.status}`,
+            message: (errorData as any)?.message || `HTTP ${response.status}: ${response.statusText}`,
+            details: (errorData as any)?.details,
+            timestamp: new Date(),
+            stack: new Error().stack
+          };
+          throw createError(error.message);
         }
 
         let responseData: any;
@@ -200,7 +201,7 @@ export class ApiClient {
         }
 
         // Don't retry on 4xx errors (except 429)
-        if (error instanceof ApiError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429) {
+        if (error instanceof AppError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429) {
           break;
         }
 
@@ -270,12 +271,12 @@ export class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
-    const xhr = new XMLHttpRequest();
+    const xhr = new (globalThis.XMLHttpRequest || ({} as any))();
 
     return new Promise((resolve, reject) => {
       // Handle progress
       if (options.onProgress) {
-        xhr.upload.addEventListener('progress', (event) => {
+        xhr.upload.addEventListener('progress', (event: ProgressEvent) => {
           if (event.lengthComputable) {
             const progress = (event.loaded / event.total) * 100;
             options.onProgress!(progress);
@@ -381,7 +382,7 @@ export class ApiClient {
    * Clear authentication
    */
   clearAuth(): void {
-    this.config.auth = undefined;
+    this.config.auth = undefined as any;
     delete this.defaultHeaders.Authorization;
     delete this.defaultHeaders['X-API-Key'];
   }

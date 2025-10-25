@@ -1,0 +1,185 @@
+---
+# PodDisruptionBudgets for LabelMint Production Services
+# Ensures high availability during voluntary disruptions
+
+---
+# Web Application PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-web-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: web
+    env: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: web
+
+---
+# Admin Application PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-admin-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: admin
+    env: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: labelmint
+      component: admin
+
+---
+# Labeling Backend PodDisruptionBudget (Critical Service)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-labeling-backend-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: labeling-backend
+    env: production
+spec:
+  minAvailable: 3
+  maxUnavailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: labeling-backend
+
+---
+# Payment Backend PodDisruptionBudget (Critical Service)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-payment-backend-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: payment-backend
+    env: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: payment-backend
+
+---
+# API Gateway PodDisruptionBudget (Critical Service)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-api-gateway-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: api-gateway
+    env: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: api-gateway
+
+---
+# Client Bot PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-client-bot-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: client-bot
+    env: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: labelmint
+      component: client-bot
+
+---
+# Worker Bot PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-worker-bot-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: worker-bot
+    env: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: worker-bot
+
+---
+# Database PodDisruptionBudget (PostgreSQL)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-postgres-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: postgres
+    env: production
+spec:
+  minAvailable: 1
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: labelmint
+      component: postgres
+
+---
+# Redis PodDisruptionBudget (Cache)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-redis-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis
+    env: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: labelmint
+      component: redis
+
+---
+# MinIO PodDisruptionBudget (Storage)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-minio-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: minio
+    env: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: labelmint
+      component: minio

@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { PropsWithChildren, useState, useEffect } from 'react'
 import { initializeApiService, getApiService } from '@/lib/apiService'
+import { WebSocketProvider } from '@/hooks/useWebSocket'
+import { Toaster } from 'sonner'
+import { ConnectionStatusToast } from '@/components/ui/advanced-toast'
 
 export function Providers({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -37,10 +40,32 @@ export function Providers({ children }: PropsWithChildren) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
-      {process.env.NODE_ENV === 'development' && (
-        <ReactQueryDevtools initialIsOpen={false} />
-      )}
+      <WebSocketProvider>
+        {children}
+
+        {/* Global Toast Container */}
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          expand={false}
+          duration={4000}
+          className="backdrop-blur-sm"
+        />
+
+        {/* Connection Status Indicator */}
+        <ConnectionStatusToastWrapper />
+
+        {process.env.NODE_ENV === 'development' && (
+          <ReactQueryDevtools initialIsOpen={false} />
+        )}
+      </WebSocketProvider>
     </QueryClientProvider>
   )
+}
+
+// Wrapper component for connection status with WebSocket hook
+function ConnectionStatusToastWrapper() {
+  // This component will be rendered inside the WebSocketProvider
+  return null // The actual connection status is handled inside the WebSocket hook
 }

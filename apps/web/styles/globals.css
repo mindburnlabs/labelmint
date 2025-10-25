@@ -85,7 +85,7 @@
   }
 
   .dark {
-    /* Dark Theme - Professional Blue Palette */
+    /* Dark Theme - Modern Dark Palette */
     --background: 222 84% 5%;
     --foreground: 210 40% 98%;
     --card: 222 84% 5%;
@@ -93,20 +93,20 @@
     --popover: 222 84% 5%;
     --popover-foreground: 210 40% 98%;
 
-    /* Primary - Lighter Blue for Dark Mode */
-    --primary: 217 91% 70%;
+    /* Primary - Vibrant Blue for Dark Mode */
+    --primary: 217 91% 60%;
     --primary-foreground: 222 84% 5%;
     --primary-50: 217 91% 95%;
     --primary-100: 217 91% 90%;
     --primary-200: 217 91% 80%;
     --primary-300: 217 91% 70%;
     --primary-400: 217 91% 65%;
-    --primary-500: 217 91% 70%;
-    --primary-600: 217 91% 65%;
-    --primary-700: 217 91% 60%;
-    --primary-800: 217 91% 55%;
-    --primary-900: 217 91% 50%;
-    --primary-950: 217 91% 45%;
+    --primary-500: 217 91% 60%;
+    --primary-600: 217 91% 55%;
+    --primary-700: 217 91% 50%;
+    --primary-800: 217 91% 45%;
+    --primary-900: 217 91% 40%;
+    --primary-950: 217 91% 35%;
 
     /* Secondary - Dark Gray */
     --secondary: 217 33% 17%;
@@ -141,7 +141,7 @@
     --accent-foreground: 210 40% 98%;
     --border: 217 33% 17%;
     --input: 217 33% 17%;
-    --ring: 217 91% 70%;
+    --ring: 217 91% 60%;
   }
 }
 
@@ -411,5 +411,137 @@
       linear-gradient(to right, hsl(var(--border) / 0.1) 1px, transparent 1px),
       linear-gradient(to bottom, hsl(var(--border) / 0.1) 1px, transparent 1px);
     background-size: 50px 50px;
+  }
+
+  /* Enhanced Animations */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px) translateX(0px);
+    }
+    33% {
+      transform: translateY(-20px) translateX(10px);
+    }
+    66% {
+      transform: translateY(10px) translateX(-10px);
+    }
+  }
+
+  @keyframes float-slow {
+    0%, 100% {
+      transform: translateY(0px) translateX(0px);
+    }
+    25% {
+      transform: translateY(-30px) translateX(5px);
+    }
+    50% {
+      transform: translateY(20px) translateX(-5px);
+    }
+    75% {
+      transform: translateY(-10px) translateX(10px);
+    }
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.05);
+    }
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-float-slow {
+    animation: float-slow 8s ease-in-out infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 4s ease-in-out infinite;
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Enhanced glass effect */
+  .glass-enhanced {
+    backdrop-filter: blur(12px) saturate(180%);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .glass-dark-enhanced {
+    backdrop-filter: blur(12px) saturate(180%);
+    background: rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Enhanced gradient text */
+  .gradient-text-enhanced {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+    background-size: 200% 200%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  /* Dark theme gradient text */
+  .dark .gradient-text-enhanced {
+    background: linear-gradient(135deg, #06ffa5 0%, #00b4d8 25%, #7209b7 50%, #f72585 75%, #4cc9f0 100%);
+    background-size: 200% 200%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Performance optimizations */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-bounce {
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
 }

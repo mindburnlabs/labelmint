@@ -1,15 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Menu, X, Zap, Moon, Sun } from 'lucide-react'
+import { Menu, X, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useTheme } from 'next-themes'
 import Link from 'next/link'
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
-  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,18 +28,18 @@ export default function Navbar() {
   return (
     <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
       scrolled
-        ? 'bg-background/80 backdrop-blur-md border-border shadow-sm'
+        ? 'bg-slate-900/90 backdrop-blur-md border-white/10 shadow-xl'
         : 'bg-transparent'
     }`}>
       <div className="container">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Zap className="w-5 h-5 text-primary-foreground" />
+            <Link href="/" className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <Zap className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold">LabelMint</span>
+              <span className="text-2xl font-bold text-white">LabelMint</span>
             </Link>
           </div>
 
@@ -51,7 +49,7 @@ export default function Navbar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+                className="text-gray-300 hover:text-white transition-colors text-sm font-medium hover:text-cyan-400"
               >
                 {item.name}
               </Link>
@@ -60,42 +58,19 @@ export default function Navbar() {
 
           {/* Right Side Actions */}
           <div className="hidden lg:flex items-center space-x-4">
-            {/* Theme Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="w-9 h-9"
-            >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-
             {/* Sign In Button */}
-            <Button variant="ghost">
+            <Button variant="ghost" className="text-gray-300 hover:text-white hover:bg-white/10">
               Sign In
             </Button>
 
             {/* Get Started Button */}
-            <Button>
+            <Button className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border-0 shadow-lg">
               Get Started
             </Button>
           </div>
 
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="w-9 h-9"
-            >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-
             <Button
               variant="ghost"
               size="icon"

@@ -45,13 +45,11 @@ export { useForm } from './lib/validation';
 // Services
 export { ApiService, initializeApiService, getApiService } from './services/apiService';
 export type { ApiConfig, ApiError, TaskResponse, SubmitTaskResponse, UserProfile } from './services/apiService';
-export { TonWalletService, TonConnectAdapter, TelegramWalletAdapter } from './services/tonWalletService';
+export { TonWalletService, initializeTonWalletService, getTonWalletService } from './services/tonWalletService';
 export type {
-  TonWalletConnection,
-  TonTransactionRequest,
-  TonTransaction,
-  TonWalletProvider,
-  TonWalletAdapter,
+  WalletBalance,
+  Transaction,
+  TonWalletConfig,
 } from './services/tonWalletService';
 export { SocketService, initializeSocketService, getSocketService } from './services/socketService';
 export type {
@@ -67,12 +65,11 @@ export type { PerformanceMetrics, BundleAnalysis } from './lib/performance';
 
 // Form validation
 export { Validator, FormManager } from './lib/validation';
-export type { 
-  ValidationRule, 
-  ValidationResult, 
-  FormField as ValidationFormField, 
-  FormState,
-  UseFormReturn 
+export type {
+  ValidationRule as ValidationRuleType,
+  ValidationResult,
+  FormField as ValidationFormField,
+  FormState
 } from './lib/validation';
 
 // Types
@@ -86,7 +83,6 @@ export type {
   EventHandlers,
   ThemeProps,
   AnimationProps,
-  FormFieldProps,
   ModalProps,
   NotificationItem,
   SkeletonProps,
@@ -98,7 +94,6 @@ export type {
   TreeNode,
   DateRange,
   DateValue,
-  ValidationRule,
   FormValidation,
   GridProps,
   RowProps,
@@ -113,7 +108,7 @@ export type { TransactionHistoryProps } from './components/wallet/TransactionHis
 export type { BalanceDisplayProps } from './components/wallet/BalanceDisplay';
 export type { UseSocketOptions, UseSocketReturn } from './hooks/useSocket';
 export type { PaymentModalProps } from './components/payment/PaymentModal';
-export type { PaymentHistoryProps, Payment } from './components/payment/PaymentHistory';
+export type { PaymentHistoryProps } from './components/payment/PaymentHistory';
 export type { WithdrawalFormProps } from './components/payment/WithdrawalForm';
 export type { TooltipProps } from './components/Tooltip';
 export type { BadgeProps } from './components/Badge';
@@ -125,7 +120,7 @@ export type { UseTranslationReturn } from './hooks/useTranslation';
 export type { PerformanceMonitorProps } from './components/PerformanceMonitor';
 export type { UsePerformanceReturn } from './hooks/usePerformance';
 export type { FormProps } from './components/Form';
-export type { FormFieldProps } from './components/FormField';
+export type { FormFieldProps as FormFieldComponentProps } from './components/FormField';
 
 // Design System
 export * from './lib/design-tokens';

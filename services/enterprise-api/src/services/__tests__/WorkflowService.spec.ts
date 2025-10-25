@@ -24,6 +24,12 @@ vi.mock('../WorkflowEngine.js', () => ({
   }
 }))
 
+vi.mock('../AuditService.js', () => ({
+  AuditService: {
+    log: vi.fn()
+  }
+}))
+
 const { prisma } = await import('../../app.js')
 const { workflowEngine } = await import('../WorkflowEngine.js')
 const { WorkflowService } = await import('../WorkflowService.js')

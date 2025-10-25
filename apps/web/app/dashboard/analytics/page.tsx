@@ -246,6 +246,7 @@ export default function AnalyticsPage() {
               </div>
               <FileText className="h-8 w-8 text-blue-500" />
             </div>
+          </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
@@ -261,6 +262,7 @@ export default function AnalyticsPage() {
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
+          </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
@@ -275,6 +277,7 @@ export default function AnalyticsPage() {
               </div>
               <Users className="h-8 w-8 text-purple-500" />
             </div>
+          </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
@@ -290,10 +293,12 @@ export default function AnalyticsPage() {
               </div>
               <BarChart3 className="h-8 w-8 text-yellow-500" />
             </div>
-          </motion.div>
+          </div>
+        </motion.div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div>
+          {/* Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Task Volume Chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -377,6 +382,7 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </motion.div>
+          </div>
         </div>
 
         {/* Worker Performance & Project Metrics */}

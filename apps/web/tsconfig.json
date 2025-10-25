@@ -5,9 +5,14 @@
   ],
   "compilerOptions": {
     "jsx": "preserve",
+    "jsxImportSource": "react",
     "strict": true,
     "target": "ES2022",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2022"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -28,15 +33,33 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@/components/*": ["./src/components/*"],
-      "@/lib/*": ["./src/lib/*"],
-      "@/hooks/*": ["./src/hooks/*"],
-      "@/types/*": ["./src/types/*"],
-      "@/styles/*": ["./styles/*"],
-      "@/public/*": ["./public/*"],
-      "@labelmint/ui": ["../../packages/ui/src"],
-      "@labelmint/shared": ["../../packages/shared/src"]
+      "@/*": [
+        "./*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/lib/*": [
+        "./lib/*"
+      ],
+      "@/hooks/*": [
+        "./hooks/*"
+      ],
+      "@/types/*": [
+        "./src/types/*"
+      ],
+      "@/styles/*": [
+        "./styles/*"
+      ],
+      "@/public/*": [
+        "./public/*"
+      ],
+      "@labelmint/ui": [
+        "../../packages/ui/src"
+      ],
+      "@labelmint/shared": [
+        "../../packages/shared/src"
+      ]
     }
   },
   "include": [

@@ -1,11 +1,11 @@
 import Hero from '@/components/Hero'
-import Features from '@/components/Features'
-import HowItWorks from '@/components/HowItWorks'
-import Pricing from '@/components/Pricing'
-import Testimonials from '@/components/Testimonials'
-import CTA from '@/components/CTA'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
+// import Features from '@/components/Features'
+// import HowItWorks from '@/components/HowItWorks'
+// import Pricing from '@/components/Pricing'
+// import Testimonials from '@/components/Testimonials'
+// import CTA from '@/components/CTA'
 
 export default function Home() {
   return (
@@ -13,11 +13,11 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
-        <Features />
+        {/* <Features />
         <HowItWorks />
         <Pricing />
         <Testimonials />
-        <CTA />
+        <CTA /> */}
       </main>
       <Footer />
     </div>

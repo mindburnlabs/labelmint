@@ -1,3 +1,5 @@
+'use client';
+
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -41,7 +43,7 @@ export function useAuth() {
 
       if (response.ok) {
         const data = await response.json();
-        setUser(data.user);
+        setUser(data.data.user);
       } else {
         logout();
       }
@@ -68,8 +70,7 @@ export function useAuth() {
     }
 
     const data = await response.json();
-    setTokens(data.accessToken, data.refreshToken);
-    setUser(data.user);
+    setUser(data.data.user);
     router.push('/dashboard');
   }
 
@@ -77,14 +78,10 @@ export function useAuth() {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAccessToken()}`,
-        },
       });
     } catch (error) {
       console.error('Logout error:', error);
     }
-    clearTokens();
     setUser(null);
     router.push('/auth/login');
   }

@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js'
 import { AuditService } from './AuditService.js'
 import type { WorkflowDefinition } from '../types/workflow.js'
 
-interface WorkflowDetail extends WorkflowDefinition {
+export interface WorkflowDetail extends WorkflowDefinition {
   creator?: {
     id: string
     email?: string | null
@@ -342,6 +342,16 @@ export class WorkflowService {
     }
 
     const startTime = new Date()
+    const baseContext = {
+      variables: {},
+      environment: {},
+      secrets: {},
+      metadata: {
+        organizationId,
+        userId
+      }
+    }
+
     const executionRecord = await prisma.workflowExecution.create({
       data: {
         workflowId: id,
@@ -351,27 +361,15 @@ export class WorkflowService {
         status: 'RUNNING',
         input,
         startTime,
-        context: {
-          metadata: {
-            organizationId,
-            userId
-          }
-        }
+        context: baseContext
       }
     })
 
     try {
-      const context = {
-        metadata: {
-          organizationId,
-          userId
-        }
-      }
-
       const executionResult = await workflowEngine.execute(
         id,
         input,
-        context,
+        baseContext,
         userId,
         'manual'
       )
@@ -410,7 +408,7 @@ export class WorkflowService {
         status: 'completed',
         input,
         output: executionResult?.output ?? {},
-        context: context,
+        context: baseContext,
         startedAt: startTime,
         completedAt: endTime,
         duration,
@@ -467,6 +465,7 @@ export class WorkflowService {
       limit?: number
       startDate?: Date
       endDate?: Date
+      triggeredBy?: string
     } = {}
   ): Promise<{ executions: WorkflowExecution[]; total: number }> {
     const {
@@ -475,7 +474,8 @@ export class WorkflowService {
       page = 1,
       limit = 20,
       startDate,
-      endDate
+      endDate,
+      triggeredBy
     } = options
 
     const where: any = {
@@ -490,6 +490,10 @@ export class WorkflowService {
       where.status = status.toUpperCase()
     }
 
+    if (triggeredBy) {
+      where.triggeredBy = triggeredBy
+    }
+
     if (startDate || endDate) {
       where.startTime = {}
       if (startDate) where.startTime.gte = startDate
@@ -501,7 +505,12 @@ export class WorkflowService {
         where,
         orderBy: { startTime: 'desc' },
         skip: (page - 1) * limit,
-        take: limit
+        take: limit,
+        include: {
+          workflow: {
+            select: { version: true }
+          }
+        }
       }),
       prisma.workflowExecution.count({ where })
     ])
@@ -518,7 +527,18 @@ export class WorkflowService {
         duration: e.duration || undefined,
         triggeredBy: e.triggeredBy || '',
         triggeredByType: e.triggeredByType as any,
-        error: e.error || undefined
+        error: e.error || undefined,
+        context: (e.context as any) || {
+          variables: {},
+          environment: {},
+          secrets: {},
+          metadata: {
+            organizationId,
+            userId: e.triggeredBy
+          }
+        },
+        workflowVersion: (e.workflow as any)?.version ?? 1,
+        logs: (e.logs as any) || []
       })),
       total
     }
@@ -654,6 +674,64 @@ export class WorkflowService {
     )
 
     return duplicated
+  }
+
+  static async cloneWorkflow(params: {
+    sourceWorkflowId: string
+    organizationId: string
+    name: string
+    description?: string
+    clonedBy: string
+  }): Promise<WorkflowDefinition> {
+    const original = await this.getById(params.sourceWorkflowId, params.organizationId)
+    if (!original) {
+      throw new Error('Workflow not found')
+    }
+
+    return this.create(
+      params.organizationId,
+      {
+        name: params.name,
+        description: params.description ?? original.description,
+        nodes: original.nodes,
+        edges: original.edges,
+        variables: original.variables,
+        settings: original.settings,
+        triggers: original.triggers,
+        category: original.category,
+        tags: original.tags,
+        isActive: original.isActive
+      },
+      params.clonedBy
+    )
+  }
+
+  static async importWorkflow(params: {
+    workflowData: Partial<WorkflowDefinition> & { nodes?: any[]; edges?: any[] }
+    organizationId: string
+    name?: string
+    description?: string
+    importedBy: string
+  }): Promise<WorkflowDefinition> {
+    const { workflowData, organizationId, importedBy } = params
+    const name = params.name || workflowData.name || 'Imported Workflow'
+    const definition = (workflowData as any).definition || workflowData
+
+    return this.create(
+      organizationId,
+      {
+        name,
+        description: params.description ?? workflowData.description,
+        nodes: definition.nodes || [],
+        edges: definition.edges || [],
+        variables: definition.variables || [],
+        settings: definition.settings || this.getDefaultSettings(),
+        triggers: definition.triggers || [],
+        category: workflowData.category,
+        tags: workflowData.tags || []
+      },
+      importedBy
+    )
   }
 
   /**

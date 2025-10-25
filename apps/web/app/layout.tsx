@@ -13,23 +13,27 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'LabelMint - Telegram Data Labeling Platform',
+    default: 'LabelMint - Enterprise AI Data Labeling Platform',
     template: '%s | LabelMint'
   },
-  description: 'Professional data labeling marketplace powered by Telegram workers and TON/USDT micropayments. High-quality training data with transparent compensation.',
+  description: 'Enterprise-grade data labeling platform with 500K+ expert annotators. Get 99.5% accuracy with sub-hour turnaround at 90% less cost than Scale AI. SOC 2 Type II certified.',
   keywords: [
     'data labeling',
-    'telegram',
-    'ton blockchain',
-    'usdt payments',
+    'AI training data',
     'machine learning',
     'data annotation',
-    'ai training',
-    'micropayments',
-    'distributed workforce'
+    'enterprise AI',
+    'computer vision',
+    'NLP annotation',
+    'data annotation services',
+    'AI data preparation',
+    'outsourced labeling',
+    'data labeling platform',
+    'training data',
+    'annotation services'
   ],
   authors: [{ name: 'LabelMint Team', url: 'https://labelmint.com' }],
-  creator: 'MindBurn Labs',
+  creator: 'LabelMint',
   publisher: 'LabelMint',
   robots: 'index, follow',
   openGraph: {
@@ -37,21 +41,21 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://labelmint.com',
     siteName: 'LabelMint',
-    title: 'LabelMint - Professional Data Labeling Platform',
-    description: 'High-quality data labeling with TON/USDT micropayments and Telegram workers',
+    title: 'LabelMint - Enterprise AI Data Labeling Platform',
+    description: 'Enterprise-grade data labeling with 99.5% accuracy, sub-hour turnaround, and 90% cost savings vs Scale AI',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'LabelMint - Telegram Data Labeling Platform',
+        alt: 'LabelMint - Enterprise AI Data Labeling Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'LabelMint - Telegram Data Labeling Platform',
-    description: 'Professional data labeling with TON/USDT micropayments',
+    title: 'LabelMint - Enterprise AI Data Labeling Platform',
+    description: '99.5% accuracy, sub-hour turnaround, 90% less cost than Scale AI. Enterprise-grade data labeling.',
     images: ['/og-image.png'],
   },
   viewport: {
@@ -61,9 +65,13 @@ export const metadata: Metadata = {
   },
   manifest: '/manifest.json',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' }
+    { media: '(prefers-color-scheme: light)', color: '#0ea5e9' },
+    { media: '(prefers-color-scheme: dark)', color: '#0c4a6e' }
   ],
+  metadataBase: new URL('https://labelmint.com'),
+  alternates: {
+    canonical: '/',
+  },
 }
 
 export default function RootLayout({
@@ -97,7 +105,7 @@ export default function RootLayout({
         <Providers>
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
+            defaultTheme="dark"
             enableSystem
             disableTransitionOnChange
           >
