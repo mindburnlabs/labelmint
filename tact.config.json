@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tact-lang/tact/main/schema.json",
+  "projects": [
+    {
+      "name": "PaymentProcessor",
+      "path": "./contracts/PaymentProcessor.tact",
+      "output": "./contracts/output",
+      "options": {
+        "debug": true,
+        "external": true,
+        "mathInt": true,
+        "ipfsCid": true
+      }
+    }
+  ],
+  "compiler": {
+    "version": "^1.5.0",
+    "options": {
+      "debug": true,
+      "external": true,
+      "mathInt": true
+    }
+  }
+}

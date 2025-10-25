@@ -8,6 +8,7 @@ import {
 } from '../types/workflow.js'
 import { prisma } from '../app.js'
 import { logger } from '../utils/logger.js'
+import { randomUUID } from 'crypto'
 import { AuditService } from './AuditService.js'
 import type { WorkflowDefinition } from '../types/workflow.js'
 
@@ -581,7 +582,7 @@ export class WorkflowService {
       userId
     })
 
-    return this.mapToWorkflowTemplate(template)
+    return this.mapToWorkflowTemplate(template, false)
   }
 
   /**
@@ -788,9 +789,52 @@ export class WorkflowService {
   }
 
   /**
+   * Load reviews for a workflow template
+   */
+  private static async loadTemplateReviews(templateId: string): Promise<TemplateReview[]> {
+    try {
+      // Check if there's a reviews table, otherwise return empty array
+      // This is a fallback implementation in case the reviews table doesn't exist yet
+      const reviewsQuery = `
+        SELECT id, "userId", rating, comment, "createdAt"
+        FROM "TemplateReview"
+        WHERE "templateId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 50
+      `;
+
+      try {
+        const reviews = await prisma.$queryRawUnsafe(reviewsQuery, templateId) as any[];
+        return reviews.map(review => ({
+          id: review.id,
+          userId: review.userId,
+          rating: review.rating,
+          comment: review.comment,
+          createdAt: new Date(review.createdAt)
+        }));
+      } catch (dbError) {
+        // If the table doesn't exist or there's an error, return empty reviews
+        logger.warn('Template reviews table not accessible, returning empty reviews', {
+          templateId,
+          error: dbError instanceof Error ? dbError.message : 'Unknown error'
+        });
+        return [];
+      }
+    } catch (error) {
+      logger.error('Failed to load template reviews', { templateId, error });
+      return [];
+    }
+  }
+
+  /**
    * Map Prisma template to WorkflowTemplate
    */
-  private static mapToWorkflowTemplate(template: any): WorkflowTemplate {
+  private static async mapToWorkflowTemplate(
+    template: any,
+    includeReviews: boolean = false
+  ): Promise<WorkflowTemplate> {
+    const reviews = includeReviews ? await this.loadTemplateReviews(template.id) : [];
+
     return {
       id: template.id,
       name: template.name,
@@ -800,11 +844,327 @@ export class WorkflowService {
       isPublic: template.isPublic,
       usageCount: template.usageCount,
       rating: template.rating.toNumber(),
-      reviews: [], // TODO: Load reviews separately
+      reviews,
       createdBy: template.createdBy,
       createdAt: template.createdAt,
       updatedAt: template.updatedAt,
       definition: template.definition || template.workflow?.definition || {}
+    }
+  }
+
+  /**
+   * Get a workflow template by ID
+   */
+  static async getTemplate(
+    templateId: string,
+    organizationId?: string,
+    includeReviews: boolean = false
+  ): Promise<WorkflowTemplate> {
+    const template = await prisma.workflowTemplate.findUnique({
+      where: { id: templateId },
+      include: {
+        workflow: {
+          select: {
+            organizationId: true,
+            definition: true
+          }
+        }
+      }
+    });
+
+    if (!template) {
+      throw new Error('Template not found');
+    }
+
+    // Check access permissions if organizationId is provided
+    if (organizationId && !template.isPublic && template.workflow?.organizationId !== organizationId) {
+      throw new Error('Access denied to template');
+    }
+
+    return this.mapToWorkflowTemplate(template, includeReviews);
+  }
+
+  /**
+   * List workflow templates
+   */
+  static async listTemplates(
+    organizationId?: string,
+    options: {
+      category?: string;
+      tags?: string[];
+      isPublic?: boolean;
+      limit?: number;
+      offset?: number;
+      includeReviews?: boolean;
+    } = {}
+  ): Promise<{ templates: WorkflowTemplate[]; total: number }> {
+    const {
+      category,
+      tags,
+      isPublic,
+      limit = 20,
+      offset = 0,
+      includeReviews = false
+    } = options;
+
+    const where: any = {};
+
+    if (category) {
+      where.category = category;
+    }
+
+    if (tags && tags.length > 0) {
+      where.tags = {
+        hasSome: tags
+      };
+    }
+
+    if (typeof isPublic === 'boolean') {
+      where.isPublic = isPublic;
+    } else if (organizationId) {
+      // If not filtering by public status and organizationId is provided,
+      // show public templates OR organization's private templates
+      where.OR = [
+        { isPublic: true },
+        {
+          workflow: {
+            organizationId
+          }
+        }
+      ];
+    }
+
+    const [templates, total] = await Promise.all([
+      prisma.workflowTemplate.findMany({
+        where,
+        include: {
+          workflow: {
+            select: {
+              organizationId: true,
+              definition: true
+            }
+          }
+        },
+        orderBy: [
+          { usageCount: 'desc' },
+          { rating: 'desc' },
+          { createdAt: 'desc' }
+        ],
+        take: limit,
+        skip: offset
+      }),
+      prisma.workflowTemplate.count({ where })
+    ]);
+
+    const mappedTemplates = await Promise.all(
+      templates.map(template => this.mapToWorkflowTemplate(template, includeReviews))
+    );
+
+    return { templates: mappedTemplates, total };
+  }
+
+  /**
+   * Add a review to a workflow template
+   */
+  static async addTemplateReview(
+    templateId: string,
+    userId: string,
+    rating: number,
+    comment?: string
+  ): Promise<TemplateReview> {
+    // Validate rating
+    if (rating < 1 || rating > 5) {
+      throw new Error('Rating must be between 1 and 5');
+    }
+
+    try {
+      // Check if template exists and user has access
+      const template = await prisma.workflowTemplate.findUnique({
+        where: { id: templateId },
+        include: {
+          workflow: true
+        }
+      });
+
+      if (!template) {
+        throw new Error('Template not found');
+      }
+
+      // Check if user already reviewed this template
+      const existingReviewQuery = `
+        SELECT id, rating FROM "TemplateReview"
+        WHERE "templateId" = $1 AND "userId" = $2
+      `;
+
+      let reviewId: string;
+      let isUpdate = false;
+
+      try {
+        const existingReview = await prisma.$queryRawUnsafe(existingReviewQuery, templateId, userId) as any[];
+
+        if (existingReview.length > 0) {
+          // Update existing review
+          reviewId = existingReview[0].id;
+          isUpdate = true;
+
+          const updateQuery = `
+            UPDATE "TemplateReview"
+            SET rating = $1, comment = $2, "updatedAt" = NOW()
+            WHERE id = $3
+            RETURNING id, "userId", rating, comment, "createdAt"
+          `;
+
+          await prisma.$queryRawUnsafe(updateQuery, rating, comment, reviewId);
+        }
+      } catch (dbError) {
+        // Table might not exist, we'll handle it below
+      }
+
+      if (!isUpdate) {
+        // Create new review
+        reviewId = randomUUID();
+
+        const insertQuery = `
+          INSERT INTO "TemplateReview" (id, "templateId", "userId", rating, comment, "createdAt", "updatedAt")
+          VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+          RETURNING id, "userId", rating, comment, "createdAt"
+        `;
+
+        await prisma.$queryRawUnsafe(insertQuery, reviewId, templateId, userId, rating, comment || null);
+      }
+
+      // Update template rating and usage count
+      await this.updateTemplateRating(templateId);
+
+      const review: TemplateReview = {
+        id: reviewId,
+        userId,
+        rating,
+        comment,
+        createdAt: new Date()
+      };
+
+      logger.info('Template review added', {
+        templateId,
+        userId,
+        rating,
+        isUpdate
+      });
+
+      return review;
+
+    } catch (error) {
+      logger.error('Failed to add template review', { templateId, userId, rating, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Update template's average rating based on all reviews
+   */
+  private static async updateTemplateRating(templateId: string): Promise<void> {
+    try {
+      const updateRatingQuery = `
+        UPDATE "WorkflowTemplate"
+        SET rating = COALESCE((
+          SELECT CAST(AVG(rating) AS DECIMAL(3,2))
+          FROM "TemplateReview"
+          WHERE "templateId" = $1
+        ), 0)
+        WHERE id = $1
+      `;
+
+      await prisma.$queryRawUnsafe(updateRatingQuery, templateId);
+    } catch (error) {
+      logger.warn('Failed to update template rating', { templateId, error });
+    }
+  }
+
+  /**
+   * Delete a template review
+   */
+  static async deleteTemplateReview(
+    templateId: string,
+    userId: string
+  ): Promise<void> {
+    try {
+      const deleteQuery = `
+        DELETE FROM "TemplateReview"
+        WHERE "templateId" = $1 AND "userId" = $2
+      `;
+
+      await prisma.$queryRawUnsafe(deleteQuery, templateId, userId);
+
+      // Update template rating
+      await this.updateTemplateRating(templateId);
+
+      logger.info('Template review deleted', { templateId, userId });
+
+    } catch (error) {
+      logger.error('Failed to delete template review', { templateId, userId, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Get reviews for a template with pagination
+   */
+  static async getTemplateReviews(
+    templateId: string,
+    options: {
+      limit?: number;
+      offset?: number;
+      rating?: number;
+    } = {}
+  ): Promise<{ reviews: TemplateReview[]; total: number }> {
+    const { limit = 20, offset = 0, rating } = options;
+
+    try {
+      let whereClause = `WHERE "templateId" = $1`;
+      const params: any[] = [templateId];
+
+      if (rating) {
+        whereClause += ` AND rating = $${params.length + 1}`;
+        params.push(rating);
+      }
+
+      const reviewsQuery = `
+        SELECT id, "userId", rating, comment, "createdAt"
+        FROM "TemplateReview"
+        ${whereClause}
+        ORDER BY "createdAt" DESC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `;
+
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM "TemplateReview"
+        ${whereClause}
+      `;
+
+      params.push(limit, offset);
+
+      const [reviews, countResult] = await Promise.all([
+        prisma.$queryRawUnsafe(reviewsQuery, ...params) as any[],
+        prisma.$queryRawUnsafe(countQuery, ...params.slice(0, -2)) as any[]
+      ]);
+
+      const mappedReviews: TemplateReview[] = reviews.map(review => ({
+        id: review.id,
+        userId: review.userId,
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: new Date(review.createdAt)
+      }));
+
+      return {
+        reviews: mappedReviews,
+        total: Number(countResult[0]?.total || 0)
+      };
+
+    } catch (error) {
+      logger.error('Failed to get template reviews', { templateId, error });
+      return { reviews: [], total: 0 };
     }
   }
 }

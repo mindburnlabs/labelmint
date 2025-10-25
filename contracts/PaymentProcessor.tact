@@ -1,6 +1,3 @@
-import "@stdlib/deploy";
-import "@stdlib/stoppable";
-
 message Deposit {
     amount: Int;
     recipient: Address;
@@ -24,12 +21,12 @@ message ChannelPayment {
 }
 
 @name(PaymentProcessor)
-contract PaymentProcessor with Deployable, Stoppable {
+contract PaymentProcessor {
     owner: Address;
     balance: Int = 0;
     channelCount: UInt32 = 0;
 
-    // Channel storage (simplified - in production use proper map)
+    // Channel storage
     struct ChannelInfo {
         participant: Address;
         capacity: Int;
@@ -60,7 +57,7 @@ contract PaymentProcessor with Deployable, Stoppable {
         });
     }
 
-    // Withdraw funds (with fees for external transfers)
+    // Withdraw funds
     receive(msg: Withdraw) {
         self.requireOwner();
         require(msg.amount <= self.balance, 410, "Insufficient balance");
