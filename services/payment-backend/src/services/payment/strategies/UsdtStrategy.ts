@@ -54,23 +54,55 @@ export class UsdtStrategy implements PaymentStrategy {
    * Withdraw USDT to external address
    */
   async withdraw(amount: number, address: string, options?: TransferOptions): Promise<Transaction> {
-    if (!this.validateAddress(address)) {
-      throw new Error('Invalid TON address for USDT transfer');
+    try {
+      // Validate input parameters
+      if (!amount || amount <= 0) {
+        throw new Error(`Invalid withdrawal amount: ${amount}. Amount must be greater than 0.`);
+      }
+
+      if (!address || !this.validateAddress(address)) {
+        throw new Error(`Invalid TON address for USDT transfer: ${address}`);
+      }
+
+      // Validate amount limits (USDT has higher limits than TON)
+      if (amount > 10000000) { // 10 million USDT limit
+        throw new Error(`Withdrawal amount ${amount} USDT exceeds maximum limit of 10,000,000 USDT`);
+      }
+
+      // Minimum USDT transfer amount (to prevent dust transactions)
+      if (amount < 0.01) {
+        throw new Error(`Withdrawal amount ${amount} USDT is below minimum limit of 0.01 USDT`);
+      }
+
+      // Get USDT wallet address for the sender
+      let fromUsdtWalletAddress;
+      try {
+        fromUsdtWalletAddress = await this.getUsdtWalletAddress(address);
+      } catch (walletError) {
+        throw new Error(`Failed to get USDT wallet address: ${walletError instanceof Error ? walletError.message : 'Unknown error'}`);
+      }
+
+      // Create transaction with comprehensive error handling
+      const transaction = await this.transferUsdt({
+        fromAddress: address,
+        toAddress: address,
+        amount,
+        message: options?.message,
+        forwardAmount: toNano('0.1') // Forward amount for notification
+      });
+
+      return transaction;
+    } catch (error) {
+      logger.error('USDT withdrawal failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        amount,
+        address,
+        options
+      });
+
+      // Re-throw with more context
+      throw new Error(`USDT withdrawal failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // Get USDT wallet address for the sender
-    const fromWalletAddress = await this.getUsdtWalletAddress(address);
-
-    // Create transaction
-    const transaction = await this.transferUsdt({
-      fromAddress,
-      toAddress: address,
-      amount,
-      message: options?.message,
-      forwardAmount: toNano('0.1') // Forward amount for notification
-    });
-
-    return transaction;
   }
 
   /**

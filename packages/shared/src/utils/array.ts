@@ -310,6 +310,6 @@ export function slice<T>(array: T[], start?: number, end?: number): T[] {
  */
 export function splice<T>(array: T[], start: number, deleteCount?: number, ...items: T[]): T[] {
   const result = [...array];
-  result.splice(start, deleteCount, ...items);
+  result.splice(start, deleteCount ?? 0, ...items);
   return result;
 }

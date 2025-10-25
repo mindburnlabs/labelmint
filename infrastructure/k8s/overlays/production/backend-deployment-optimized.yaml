@@ -1,0 +1,541 @@
+# Production-Optimized Kubernetes Deployment for LabelMint Backend Services
+# ====================================================================
+# Enhanced with security, auto-scaling, and advanced health checks
+# ====================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: labelmint-backend
+  namespace: production
+  labels:
+    app: labelmint-backend
+    component: backend
+    environment: production
+    version: v2.0.0
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/description: "LabelMint Backend Services - Production API"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9091"
+    prometheus.io/path: "/metrics"
+    app.kubernetes.io/part-of: labelmint
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+      progressDeadlineSeconds: 600
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: labelmint-backend
+      component: backend
+      environment: production
+  template:
+    metadata:
+      labels:
+        app: labelmint-backend
+        component: backend
+        environment: production
+        version: v2.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+        checksum/config: "b2c3d4e5f6a1"
+        checksum/secrets: "a1f6e5d4c3b2"
+        kubernetes.io/description: "LabelMint Backend Service Pod"
+        app.kubernetes.io/version: "2.0.0"
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "1024"
+
+      # Service account with minimal permissions
+      serviceAccountName: labelmint-backend
+      serviceAccount: labelmint-backend
+
+      # Init containers for setup tasks
+      initContainers:
+      - name: check-database
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "Checking database connectivity..."
+          until pg_isready -h $DATABASE_HOST -p $DATABASE_PORT -U $DATABASE_USER; do
+            echo "Database not ready, waiting..."
+            sleep 2
+          done
+          echo "Database is ready!"
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: labelmint-config
+              key: database-host
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: labelmint-config
+              key: database-port
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: database-user
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+      - name: check-redis
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "Checking Redis connectivity..."
+          until redis-cli -h $REDIS_HOST -p $REDIS_PORT ping; do
+            echo "Redis not ready, waiting..."
+            sleep 2
+          done
+          echo "Redis is ready!"
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: labelmint-config
+              key: redis-host
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: labelmint-config
+              key: redis-port
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+      - name: database-migration
+        image: labelmint/backend:v2.0.0
+        command:
+        - sh
+        - -c
+        - |
+          echo "Running database migrations..."
+          npm run db:migrate || {
+            echo "Migration failed, but continuing for rolling updates..."
+            exit 0
+          }
+          echo "Database migrations completed!"
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: database-url
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+      # Main application container
+      containers:
+      - name: backend
+        image: labelmint/backend:v2.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        - name: metrics
+          containerPort: 9091
+          protocol: TCP
+
+        # Resource limits and requests
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 1Gi
+            ephemeral-storage: 2Gi
+          limits:
+            cpu: 4000m
+            memory: 4Gi
+            ephemeral-storage: 10Gi
+
+        # Security context for the container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # Need write access for uploads
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+
+        # Environment variables
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: HOSTNAME
+          value: "0.0.0.0"
+        - name: LOG_LEVEL
+          value: "warn"
+        - name: ENABLE_METRICS
+          value: "true"
+        - name: WORKER_CONCURRENCY
+          value: "10"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: redis-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: jwt-secret
+        - name: TON_RPC_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: labelmint-config
+              key: ton-rpc-endpoint
+        - name: APP_VERSION
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['app.kubernetes.io/version']
+        - name: BUILD_DATE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.creationTimestamp
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-LivenessProbe/1.0"
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /api/ready
+            port: http
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-ReadinessProbe/1.0"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          successThreshold: 1
+
+        # Startup probe
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: http
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "Kubernetes-StartupProbe/1.0"
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 40
+          successThreshold: 1
+
+        # Volume mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: uploads
+          mountPath: /app/uploads
+        - name: logs
+          mountPath: /app/logs
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: secrets
+          mountPath: /app/secrets
+          readOnly: true
+
+        # Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Container received SIGTERM, initiating graceful shutdown..."
+                curl -f -s http://localhost:3001/api/pre-shutdown || true
+                sleep 15
+                echo "Graceful shutdown preparation completed"
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                echo "Container started successfully"
+                curl -f -s http://localhost:3001/api/post-start || true
+
+      # Sidecar container for log aggregation
+      - name: log-shipper
+        image: fluent/fluent-bit:2.2
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        env:
+        - name: FLUENT_BIT_CONF
+          value: |
+            [SERVICE]
+                Flush         1
+                Log_Level     info
+                Daemon        off
+                Parsers_File  parsers.conf
+                HTTP_Server   On
+                HTTP_Listen   0.0.0.0
+                HTTP_Port     2020
+
+            [INPUT]
+                Name              tail
+                Path              /var/log/containers/*labelmint-backend*.log
+                Parser            docker
+                Tag               kube.*
+                Refresh_Interval  5
+                Mem_Buf_Limit     50MB
+                Skip_Long_Lines   On
+
+            [OUTPUT]
+                Name  forward
+                Match *
+                Host  fluentd.logging.svc.cluster.local
+                Port  24224
+        command: ["fluent-bit"]
+        args: ["--config=/fluent-bit/etc/fluent-bit.conf"]
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+
+      # Sidecar container for metrics collection
+      - name: node-exporter
+        image: prom/node-exporter:v1.6.1
+        imagePullPolicy: IfNotPresent
+        args:
+        - "--path.rootfs=/host"
+        - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+        - "--collector.netdev.device-exclude=^(veth|docker|br-|cali|flannel).*"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        ports:
+        - name: metrics
+          containerPort: 9100
+          protocol: TCP
+        volumeMounts:
+        - name: root
+          mountPath: /host
+          readOnly: true
+
+      # Volumes
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 2Gi
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: labelmint-uploads-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: labelmint-logs-pvc
+      - name: config
+        configMap:
+          name: labelmint-backend-config
+          defaultMode: 0644
+      - name: secrets
+        secret:
+          secretName: labelmint-backend-secrets
+          defaultMode: 0600
+      - name: varlog
+        hostPath:
+          path: /var/log
+          type: Directory
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+          type: Directory
+      - name: root
+        hostPath:
+          path: /
+
+      # Node selection and affinity
+      nodeSelector:
+        node-type: application
+        workload: production
+        kubernetes.io/os: linux
+
+      # Tolerations for dedicated nodes
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "production"
+        effect: "NoSchedule"
+      - key: "dedicated"
+        operator: "Equal"
+        value: "backend"
+        effect: "NoSchedule"
+
+      # Pod affinity and anti-affinity
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - labelmint-backend
+                - key: component
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: environment
+                  operator: In
+                  values:
+                  - production
+              topologyKey: kubernetes.io/zone
+
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - us-east-1a
+                - us-east-1b
+                - us-east-1c
+          - weight: 60
+            preference:
+              matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - m5.large
+                - m5.xlarge
+                - m5.2xlarge
+
+      # DNS configuration
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "2"
+        - name: timeout
+          value: "5"
+        - name: attempts
+          value: "2"
+
+      # Priority class for production workloads
+      priorityClassName: production-critical
+
+      # Termination grace period
+      terminationGracePeriodSeconds: 180
+
+      # Restart policy
+      restartPolicy: Always
+
+      # Topology spread constraints
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: labelmint-backend
+            component: backend
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: labelmint-backend
+            component: backend

@@ -1,4 +1,5 @@
-import { TaskStateMachine, Label, ConsensusResult, ConsensusConfig } from './TaskStateMachine';
+import { TaskStateMachine, ConsensusResult, ConsensusConfig } from './TaskStateMachine';
+import { Label as DatabaseLabel } from '../../types/label';
 import { TaskEventBus, TaskEventType } from './TaskEventBus';
 import { TaskState, TransitionContext } from './TaskState';
 
@@ -97,7 +98,7 @@ export class ConsensusService {
       await this.validateLabelSubmission(machine, submission);
 
       // Create label object
-      const label: Label = {
+      const label: DatabaseLabel = {
         id: this.generateLabelId(),
         task_id: submission.taskId,
         user_id: submission.userId,
@@ -190,7 +191,7 @@ export class ConsensusService {
     const newLabels: Label[] = [];
 
     for (const submission of submissions) {
-      const label: Label = {
+      const label: DatabaseLabel = {
         id: this.generateLabelId(),
         task_id: submission.taskId,
         user_id: submission.userId,

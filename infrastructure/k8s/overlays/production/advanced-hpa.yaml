@@ -1,0 +1,790 @@
+# ====================================================================
+# ADVANCED HORIZONTAL POD AUTOSCALING FOR 10,000+ CONCURRENT USERS
+# ====================================================================
+# Enhanced HPA configurations with custom metrics, predictive scaling,
+# and intelligent resource management
+
+---
+# Custom Metrics for advanced autoscaling
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-config
+  namespace: production
+  labels:
+    app: labelmint
+    component: autoscaling
+    environment: production
+data:
+  config.yaml: |
+    rules:
+    # API Gateway custom metrics
+    - seriesQuery: 'http_requests_total{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^(.*)_total"
+        as: "${1}_per_second"
+      metricsQuery: 'rate(http_requests_total{<<.LabelMatchers>>}[2m])'
+
+    # Response time metrics
+    - seriesQuery: 'http_request_duration_seconds{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^(.*)_seconds"
+        as: "${1}_milliseconds"
+      metricsQuery: 'histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) * 1000'
+
+    # Database connection metrics
+    - seriesQuery: 'pg_stat_database_numbackends{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^(.*)"
+        as: "${1}"
+      metricsQuery: 'pg_stat_database_numbackends{<<.LabelMatchers>>}'
+
+    # Redis metrics
+    - seriesQuery: 'redis_connected_clients{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^(.*)"
+        as: "${1}"
+      metricsQuery: 'redis_connected_clients{<<.LabelMatchers>>}'
+
+    # Queue metrics for task processing
+    - seriesQuery: 'queue_size{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^(.*)"
+        as: "${1}"
+      metricsQuery: 'queue_size{<<.LabelMatchers>>}'
+
+---
+# API Gateway Advanced HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-api-gateway-advanced-hpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: api-gateway
+    environment: production
+  annotations:
+    metric-config.object.http-requests-per-second.json-path/pods.json: |
+      {
+        "targetValue": "500",
+        "pods": {
+          "metric": {
+            "name": "http_requests_per_second"
+          },
+          "target": {
+            "type": "AverageValue",
+            "averageValue": "500"
+          }
+        }
+      }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-api-gateway
+  minReplicas: 5
+  maxReplicas: 50
+  metrics:
+  # Resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Custom metrics for advanced scaling
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "500"
+
+  - type: Pods
+    pods:
+      metric:
+        name: http_request_duration_milliseconds
+      target:
+        type: AverageValue
+        averageValue: "200"  # Scale up if 95th percentile > 200ms
+
+  - type: External
+    external:
+      metric:
+        name: active_users_count
+      target:
+        type: AverageValue
+        averageValue: "1000"
+
+  - type: External
+    external:
+      metric:
+        name: queue_processing_latency
+      target:
+        type: AverageValue
+        averageValue: "1000"  # milliseconds
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 10
+        periodSeconds: 15
+      - type: Percent
+        value: 200  # Allow aggressive scaling during traffic spikes
+        periodSeconds: 30
+        selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      - type: Pods
+        value: 5
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# Labeling Backend Advanced HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-labeling-backend-advanced-hpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: labeling-backend
+    environment: production
+  annotations:
+    autoscaling.alpha.kubernetes.io/metrics: "[{\"type\":\"Resource\",\"resource\":{\"name\":\"cpu\",\"target\":{\"type\":\"Utilization\",\"averageUtilization\":60}}}]"
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-labeling-backend
+  minReplicas: 8
+  maxReplicas: 80
+  metrics:
+  # Resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Task queue metrics
+  - type: External
+    external:
+      metric:
+        name: task_queue_size
+      target:
+        type: AverageValue
+        averageValue: "100"
+
+  - type: External
+    external:
+      metric:
+        name: tasks_processing_rate
+      target:
+        type: AverageValue
+        averageValue: "50"
+
+  # Database connection metrics
+  - type: Pods
+    pods:
+      metric:
+        name: pg_stat_database_numbackends
+      target:
+        type: AverageValue
+        averageValue: "15"
+
+  # Worker activity metrics
+  - type: External
+    external:
+      metric:
+        name: active_workers_count
+      target:
+        type: AverageValue
+        averageValue: "1000"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 45
+      policies:
+      - type: Percent
+        value: 150
+        periodSeconds: 15
+      - type: Pods
+        value: 8
+        periodSeconds: 15
+      - type: Percent
+        value: 300
+        periodSeconds: 30
+        selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 240
+      policies:
+      - type: Percent
+        value: 30
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# Payment Backend Advanced HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-payment-backend-advanced-hpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: payment-backend
+    environment: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-payment-backend
+  minReplicas: 5
+  maxReplicas: 40
+  metrics:
+  # Resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 65
+
+  # Transaction processing metrics
+  - type: External
+    external:
+      metric:
+        name: payment_transactions_per_second
+      target:
+        type: AverageValue
+        averageValue: "25"
+
+  - type: External
+    external:
+      metric:
+        name: transaction_queue_size
+      target:
+        type: AverageValue
+        averageValue: "50"
+
+  - type: External
+    external:
+      metric:
+        name: blockchain_request_latency
+      target:
+        type: AverageValue
+        averageValue: "2000"  # milliseconds
+
+  # TON network metrics
+  - type: External
+    external:
+      metric:
+        name: ton_pending_transactions
+      target:
+        type: AverageValue
+        averageValue: "20"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 200
+        periodSeconds: 15
+      - type: Pods
+        value: 5
+        periodSeconds: 15
+      - type: Percent
+        value: 400
+        periodSeconds: 30
+        selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 180
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# Web Application Advanced HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-web-advanced-hpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: web
+    environment: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-web
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+  # Resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Web-specific metrics
+  - type: External
+    external:
+      metric:
+        name: active_sessions_count
+      target:
+        type: AverageValue
+        averageValue: "500"
+
+  - type: External
+    external:
+      metric:
+        name: page_load_time_p95
+      target:
+        type: AverageValue
+        averageValue: "2000"  # milliseconds
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 3
+        periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 120
+      selectPolicy: Min
+
+---
+# Worker Bot Advanced HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: labelmint-worker-bot-advanced-hpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: worker-bot
+    environment: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-worker-bot
+  minReplicas: 4
+  maxReplicas: 25
+  metrics:
+  # Resource metrics
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Telegram-specific metrics
+  - type: External
+    external:
+      metric:
+        name: telegram_updates_queue_size
+      target:
+        type: AverageValue
+        averageValue: "100"
+
+  - type: External
+    external:
+      metric:
+        name: active_telegram_users
+      target:
+        type: AverageValue
+        averageValue: "2000"
+
+  - type: External
+    external:
+      metric:
+        name: task_completion_rate
+      target:
+        type: AverageValue
+        averageValue: "10"  # tasks per minute
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 150
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 15
+        periodSeconds: 90
+      selectPolicy: Min
+
+---
+# Vertical Pod Autoscaler for Resource Optimization
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: labelmint-api-gateway-vpa
+  namespace: production
+  labels:
+    app: labelmint
+    component: api-gateway
+    environment: production
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: labelmint-api-gateway
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: backend
+      minAllowed:
+        cpu: 500m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 8000m
+        memory: 8Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: "RequestsAndLimits"
+
+---
+# Cluster Autoscaler Configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+    spec:
+      serviceAccountName: cluster-autoscaler
+      containers:
+      - image: k8s.gcr.io/autoscaling/cluster-autoscaler:v1.27.0
+        name: cluster-autoscaler
+        resources:
+          limits:
+            cpu: 100m
+            memory: 300Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        command:
+        - ./cluster-autoscaler
+        - --v=4
+        - --stderrthreshold=info
+        - --cloud-provider=aws
+        - --skip-nodes-with-local-storage=false
+        - --expander=least-waste
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/labelmint
+        - --balance-similar-node-groups
+        - --skip-nodes-with-system-pods=false
+        - --max-node-provision-time=15m
+        - --scale-down-unneeded-time=2m
+        - --scale-down-delay-after-add=10m
+        - --scale-down-unready-time=15m
+        - --cluster-api-autoscaler-supported
+        - --horizontal-pod-autoscaler-use-rest-clients
+
+---
+# Predictive Autoscaler Controller
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictive-autoscaler
+  namespace: production
+  labels:
+    app: labelmint
+    component: predictive-autoscaler
+    environment: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predictive-autoscaler
+  template:
+    metadata:
+      labels:
+        app: predictive-autoscaler
+    spec:
+      serviceAccountName: predictive-autoscaler
+      containers:
+      - name: predictor
+        image: labelmint/predictive-autoscaler:latest
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.monitoring.svc.cluster.local:9090"
+        - name: METRICS_SERVER_URL
+          value: "https://metrics-server.kube-system.svc.cluster.local"
+        - name: PREDICTION_WINDOW
+          value: "15m"
+        - name: SCALE_THRESHOLD
+          value: "0.8"
+        - name: MIN_CONFIDENCE
+          value: "0.7"
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        command:
+        - /predictive-autoscaler
+        - --prometheus-address=$(PROMETHEUS_URL)
+        - --metrics-server=$(METRICS_SERVER_URL)
+        - --prediction-window=$(PREDICTION_WINDOW)
+        - --scale-threshold=$(SCALE_THRESHOLD)
+        - --min-confidence=$(MIN_CONFIDENCE)
+
+---
+# Custom Service Monitor for Predictive Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: labelmint-predictive-metrics
+  namespace: production
+  labels:
+    app: labelmint
+    component: predictive-metrics
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: labelmint
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+  namespaceSelector:
+    any: true
+
+---
+# Pod Disruption Budgets for High Availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-api-gateway-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: api-gateway
+    environment: production
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: labelmint
+      component: api-gateway
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-labeling-backend-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: labeling-backend
+    environment: production
+spec:
+  minAvailable: 5
+  selector:
+    matchLabels:
+      app: labelmint
+      component: labeling-backend
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-payment-backend-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: payment-backend
+    environment: production
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: labelmint
+      component: payment-backend
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-web-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: web
+    environment: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint
+      component: web
+
+---
+# Resource Quotas for Namespace Management
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: labelmint-production-quota
+  namespace: production
+  labels:
+    app: labelmint
+    component: resource-quota
+    environment: production
+spec:
+  hard:
+    requests.cpu: "100"
+    requests.memory: 200Gi
+    limits.cpu: "200"
+    limits.memory: 400Gi
+    persistentvolumeclaims: "50"
+    pods: "300"
+    services: "50"
+    secrets: "100"
+    configmaps: "100"
+    count/deployments.apps: "50"
+    count/replicationcontrollers.apps: "50"
+
+---
+# Limit Range for Resource Constraints
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: labelmint-production-limits
+  namespace: production
+  labels:
+    app: labelmint
+    component: limit-range
+    environment: production
+spec:
+  limits:
+  - default:
+      cpu: 1000m
+      memory: 1Gi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container
+  - max:
+      cpu: 8000m
+      memory: 16Gi
+    min:
+      cpu: 50m
+      memory: 64Mi
+    type: Container
+  - max:
+      storage: 100Gi
+    min:
+      storage: 1Gi
+    type: PersistentVolumeClaim

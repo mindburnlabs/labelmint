@@ -1,0 +1,257 @@
+# Quality Gates Configuration
+# ==========================
+# Defines quality thresholds and gates for CI/CD pipeline
+
+version: "1.0"
+
+# Overall quality gate settings
+quality_gates:
+  enabled: true
+  fail_fast: true
+  notify_on_failure: true
+
+# Code coverage requirements
+coverage:
+  enabled: true
+  minimum_total_coverage: 85
+  minimum_unit_coverage: 90
+  minimum_integration_coverage: 80
+  minimum_e2e_coverage: 70
+
+  coverage_by_type:
+    unit:
+      threshold: 90
+      fail_below_threshold: true
+    integration:
+      threshold: 80
+      fail_below_threshold: true
+    e2e:
+      threshold: 70
+      fail_below_threshold: false  # E2E tests are more volatile
+
+  coverage_by_module:
+    critical_modules:
+      - pattern: "services/payment-backend/**"
+        threshold: 95
+      - pattern: "services/labeling-backend/**"
+        threshold: 90
+      - pattern: "packages/shared/**"
+        threshold: 85
+    high_priority_modules:
+      - pattern: "apps/web/**"
+        threshold: 80
+      - pattern: "apps/telegram-mini-app/**"
+        threshold: 75
+    standard_modules:
+      - pattern: "**"
+        threshold: 70
+
+# Performance requirements
+performance:
+  enabled: true
+
+  load_testing:
+    concurrent_users: 1000
+    response_time_p95: 2000  # milliseconds
+    response_time_p99: 5000  # milliseconds
+    error_rate: 0.02  # 2%
+    throughput_min: 100  # requests per second
+
+  frontend_performance:
+    lighthouse_scores:
+      performance: 90
+      accessibility: 95
+      best_practices: 90
+      seo: 80
+
+    core_web_vitals:
+      lcp: 2500  # Largest Contentful Paint (ms)
+      fid: 100   # First Input Delay (ms)
+      cls: 0.1   # Cumulative Layout Shift
+
+# Security requirements
+security:
+  enabled: true
+
+  vulnerability_scanning:
+    max_high_vulnerabilities: 0
+    max_medium_vulnerabilities: 5
+    max_low_vulnerabilities: 20
+
+  code_analysis:
+    max_critical_issues: 0
+    max_high_issues: 2
+    max_medium_issues: 10
+
+  dependency_scanning:
+    block_circular_dependencies: true
+    max_outdated_dependencies: 10
+    block_vulnerable_dependencies: true
+
+# Code quality requirements
+code_quality:
+  enabled: true
+
+  maintainability:
+    max_complexity: 10
+    max_file_lines: 500
+    max_function_lines: 50
+    max_nesting_depth: 4
+
+  duplication:
+    max_duplicate_lines: 50
+    max_duplicate_similarity: 0.8
+
+  technical_debt:
+    max_debt_hours: 40
+    max_debt_ratio: 0.1  # 10% of total code
+
+# Test quality requirements
+test_quality:
+  enabled: true
+
+  test_metrics:
+    min_test_count: 100
+    max_test_flakiness: 0.05  # 5% flaky test rate
+    min_test_coverage: 85
+
+  test_execution:
+    max_unit_test_time: 300000    # 5 minutes
+    max_integration_test_time: 600000  # 10 minutes
+    max_e2e_test_time: 1800000    # 30 minutes
+
+  test_reliability:
+    max_failed_tests: 0
+    max_timeout_tests: 2
+    min_test_pass_rate: 0.95
+
+# Documentation requirements
+documentation:
+  enabled: true
+
+  api_documentation:
+    coverage_required: true
+    min_documented_endpoints: 0.9  # 90%
+
+  code_documentation:
+    min_function_documentation: 0.8  # 80%
+    min_class_documentation: 0.9     # 90%
+
+  readme_requirements:
+    has_installation_guide: true
+    has_usage_examples: true
+    has_contributing_guide: true
+
+# Build requirements
+build:
+  enabled: true
+
+  build_time:
+    max_build_time: 600000  # 10 minutes
+
+  build_size:
+    max_bundle_size: 5242880  # 5MB for main bundle
+    max_chunk_size: 1048576   # 1MB for chunks
+
+  compatibility:
+    min_node_version: "20.0.0"
+    supported_browsers:
+      - chrome: ">=90"
+      - firefox: ">=88"
+      - safari: ">=14"
+      - edge: ">=90"
+
+# Deployment requirements
+deployment:
+  enabled: true
+
+  health_checks:
+    required_endpoints:
+      - "/api/health"
+      - "/api/ready"
+    max_response_time: 5000  # 5 seconds
+    max_retry_attempts: 5
+
+  rollback_conditions:
+    - error_rate > 0.05  # 5%
+    - response_time_p95 > 10000  # 10 seconds
+    - health_check_failure: true
+
+# Environment-specific settings
+environments:
+  development:
+    coverage:
+      minimum_total_coverage: 70
+    performance:
+      concurrent_users: 100
+    security:
+      vulnerability_scanning:
+        enabled: false
+
+  staging:
+    coverage:
+      minimum_total_coverage: 80
+    performance:
+      concurrent_users: 500
+    security:
+      vulnerability_scanning:
+        enabled: true
+
+  production:
+    coverage:
+      minimum_total_coverage: 85
+    performance:
+      concurrent_users: 1000
+    security:
+      vulnerability_scanning:
+        enabled: true
+        max_high_vulnerabilities: 0
+
+# Notification settings
+notifications:
+  enabled: true
+
+  channels:
+    slack:
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channels:
+        - "#ci-cd"
+        - "#quality-gates"
+      notify_on:
+        - gate_failure
+        - performance_degradation
+        - security_issues
+
+  email:
+      recipients:
+        - "devops@labelmint.it"
+        - "qa@labelmint.it"
+      notify_on:
+        - gate_failure
+        - deployment_issues
+
+# Quality gate policies
+policies:
+  block_deployment_on_vulnerabilities:
+    enabled: true
+    severity_levels: ["critical", "high"]
+
+  require_code_review:
+    enabled: true
+    min_reviewers: 2
+
+  require_tests_for_changes:
+    enabled: true
+    test_types: ["unit", "integration"]
+
+  enforce_dependency_updates:
+    enabled: true
+    update_frequency: "weekly"
+
+  monitor_performance_regression:
+    enabled: true
+    regression_threshold: 0.1  # 10% degradation
+
+  require_documentation_for_api_changes:
+    enabled: true
+    documentation_types: ["endpoint", "schema"]

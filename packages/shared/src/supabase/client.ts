@@ -242,14 +242,14 @@ export class SupabaseClientWrapper {
   /**
    * Subscribe to real-time events
    */
-  subscribe(channel: string, callback: (payload: any) => void) {
+  subscribe(channel: string, callback: (_payload: any) => void) {
     return this.client.channel(channel).on('postgres_changes', { event: '*', schema: 'public' }, callback).subscribe();
   }
 
   /**
    * Subscribe to table changes
    */
-  subscribeToTable(table: string, callback: (payload: any) => void, filter?: {
+  subscribeToTable(table: string, callback: (_payload: any) => void, filter?: {
     event?: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
     schema?: string;
     filter?: string;

@@ -1,0 +1,612 @@
+# ====================================================================
+# PRODUCTION REDIS CLUSTER CONFIGURATION FOR 10,000+ CONCURRENT USERS
+# ====================================================================
+# High-availability Redis cluster with sharding, replication, and advanced caching
+
+apiVersion: redis.redis.opstreelabs.in/v1beta1
+kind: RedisCluster
+metadata:
+  name: labelmint-redis-cluster
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+  annotations:
+    description: "Production Redis cluster for high-performance caching"
+spec:
+  # Cluster configuration
+  clusterSize: 6  # 6 master nodes with replicas
+  clusterVersion: "7.2.4"
+  persistenceEnabled: true
+  redisExporter:
+    enabled: true
+    image: "oliver006/redis_exporter:latest"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Storage configuration
+  storage:
+    volumeClaimTemplate:
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "gp3-encrypted"
+        resources:
+          requests:
+            storage: 50Gi
+
+  # Resource configuration for high concurrency
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 8Gi
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+
+  # Redis configuration optimized for LabelMint
+  redisConfig:
+    # Memory management
+    maxmemory: "12gb"
+    maxmemory-policy: "allkeys-lru"
+    maxmemory-samples: 10
+
+    # Persistence configuration
+    save: "900 1 300 10 60 10000"
+    rdbcompression: "yes"
+    rdbchecksum: "yes"
+    stop-writes-on-bgsave-error: "yes"
+
+    # AOF configuration for durability
+    appendonly: "yes"
+    appendfsync: "everysec"
+    no-appendfsync-on-rewrite: "no"
+    auto-aof-rewrite-percentage: "100"
+    auto-aof-rewrite-min-size: "64mb"
+
+    # Network optimization
+    tcp-keepalive: "300"
+    timeout: "0"
+    tcp-backlog: "511"
+
+    # Performance tuning
+    hash-max-ziplist-entries: "512"
+    hash-max-ziplist-value: "64"
+    list-max-ziplist-size: "-2"
+    list-compress-depth: "0"
+    set-max-intset-entries: "512"
+    zset-max-ziplist-entries: "128"
+    zset-max-ziplist-value: "64"
+
+    # Security
+    requirepass: ${REDIS_PASSWORD}
+    protected-mode: "yes"
+
+    # Logging
+    loglevel: "notice"
+    syslog-enabled: "no"
+
+    # Client configuration
+    maxclients: "10000"
+
+    # Latency monitoring
+    latency-monitor-threshold: "100"
+
+    # Memory usage optimization
+    lazyfree-lazy-eviction: "yes"
+    lazyfree-lazy-expire: "yes"
+    lazyfree-lazy-server-del: "yes"
+    lazyfree-lazy-user-del: "yes"
+
+    # Advanced features
+    notify-keyspace-events: "Ex"
+    stream-node-max-bytes: "4096"
+    stream-node-max-entries: "100"
+
+---
+# Redis Sentinel for high availability
+apiVersion: redis.redis.opstreelabs.in/v1beta1
+kind: RedisSentinel
+metadata:
+  name: labelmint-redis-sentinel
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-sentinel
+    environment: production
+spec:
+  sentinelConfig:
+    down-after-milliseconds: "5000"
+    parallel-syncs: "1"
+    failover-timeout: "60000"
+    announce-ip: "${REDIS_ANNOUNCE_IP}"
+    announce-port: "26379"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+---
+# Redis Cluster Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: labelmint-redis-cluster-service
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: labelmint
+    component: redis-cluster
+  ports:
+  - name: redis-client
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: redis-cluster
+    port: 16379
+    targetPort: 16379
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Redis monitoring Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: labelmint-redis-metrics
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  type: ClusterIP
+  selector:
+    app: labelmint
+    component: redis-cluster
+  ports:
+  - name: metrics
+    port: 9121
+    targetPort: 9121
+    protocol: TCP
+
+---
+# ConfigMap for Redis configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-config
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+data:
+  redis.conf: |
+    # Production Redis configuration for LabelMint
+    # Optimized for 10,000+ concurrent users
+
+    # Network
+    bind 0.0.0.0
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+
+    # General
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+
+    # Database
+    databases 16
+    always-show-logo yes
+    save 900 1 300 10 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    rdb-del-sync-files no
+    dir /data
+
+    # Replication
+    replica-serve-stale-data yes
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-ping-replica-period 10
+    repl-timeout 60
+    repl-disable-tcp-nodelay no
+    replica-priority 100
+    replica-announce-ip ${REDIS_ANNOUNCE_IP}
+    replica-announce-port 6379
+
+    # Security
+    requirepass ${REDIS_PASSWORD}
+    protected-mode yes
+
+    # Memory Management
+    maxmemory 12gb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 10
+    lazyfree-lazy-eviction yes
+    lazyfree-lazy-expire yes
+    lazyfree-lazy-server-del yes
+    lazyfree-lazy-user-del yes
+
+    # AOF
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+
+    # Lua
+    lua-time-limit 5000
+
+    # Slow Log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+    # Latency Monitor
+    latency-monitor-threshold 100
+
+    # Event Notification
+    notify-keyspace-events Ex
+
+    # Advanced Config
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    client-query-buffer-limit 1gb
+    proto-max-bulk-len 512mb
+    hz 10
+    dynamic-hz yes
+    aof-rewrite-incremental-fsync yes
+    rdb-save-incremental-fsync yes
+
+    # Module loading (if needed)
+    # loadmodule /path/to/redis-modules.so
+
+  sentinel.conf: |
+    # Redis Sentinel configuration
+    port 26379
+    sentinel announce-ip ${REDIS_ANNOUNCE_IP}
+    sentinel announce-port 26379
+
+    sentinel monitor labelmint-master labelmint-redis-cluster-service 6379 2
+    sentinel down-after-milliseconds labelmint-master 5000
+    sentinel failover-timeout labelmint-master 60000
+    sentinel parallel-syncs labelmint-master 1
+    sentinel auth-pass labelmint-master ${REDIS_PASSWORD}
+
+    sentinel deny-scripts-reconfig yes
+    sentinel resolve-hostnames no
+    sentinel announce-hostnames no
+
+---
+# ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: labelmint-redis-monitor
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  selector:
+    matchLabels:
+      app: labelmint
+      component: redis-cluster
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    honorLabels: true
+
+---
+# Redis Cluster NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: labelmint-redis-netpol
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint
+      component: redis-cluster
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+    - podSelector:
+        matchLabels:
+          app: labelmint-api-gateway
+    - podSelector:
+        matchLabels:
+          app: labelmint-labeling-backend
+    - podSelector:
+        matchLabels:
+          app: labelmint-payment-backend
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 16379
+    - protocol: TCP
+      port: 9121
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: redis-cluster
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 16379
+
+---
+# Redis Cluster PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-redis-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: labelmint
+      component: redis-cluster
+
+---
+# Redis Cluster PriorityClass
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: redis-cluster-critical
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+value: 1000
+globalDefault: false
+description: "High priority class for Redis cluster pods"
+
+---
+# Redis Cluster StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: labelmint-redis-cluster
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  serviceName: labelmint-redis-cluster-headless
+  replicas: 6
+  selector:
+    matchLabels:
+      app: labelmint
+      component: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: labelmint
+        component: redis-cluster
+        environment: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+        prometheus.io/path: "/metrics"
+    spec:
+      priorityClassName: redis-cluster-critical
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
+      containers:
+      - name: redis
+        image: redis:7.2.4-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        - --cluster-enabled
+        - "yes"
+        - --cluster-config-file
+        - nodes.conf
+        - --cluster-node-timeout
+        - "5000"
+        - --appendonly
+        - "yes"
+        - --protected-mode
+        - "no"
+        - --requirepass
+        - ${REDIS_PASSWORD}
+        ports:
+        - name: redis-client
+          containerPort: 6379
+          protocol: TCP
+        - name: redis-cluster
+          containerPort: 16379
+          protocol: TCP
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: redis-password
+        - name: REDIS_ANNOUNCE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            cpu: 2000m
+            memory: 8Gi
+          limits:
+            cpu: 4000m
+            memory: 16Gi
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+          readOnly: true
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - redis-cli -a $(REDIS_PASSWORD) shutdown save
+      - name: redis-exporter
+        image: oliver006/redis_exporter:v1.45.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 9121
+          protocol: TCP
+        env:
+        - name: REDIS_ADDR
+          value: "redis://localhost:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: labelmint-secrets
+              key: redis-password
+        - name: REDIS_EXPORTER_LOG_FORMAT
+          value: "txt"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-cluster-config
+          defaultMode: 0644
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+      labels:
+        app: labelmint
+        component: redis-cluster
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "gp3-encrypted"
+      resources:
+        requests:
+          storage: 50Gi
+      selector: {}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
+---
+# Redis Cluster Headless Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: labelmint-redis-cluster-headless
+  namespace: production
+  labels:
+    app: labelmint
+    component: redis-cluster
+    environment: production
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: labelmint
+    component: redis-cluster
+  ports:
+  - name: redis-client
+    port: 6379
+    targetPort: 6379
+    protocol: TCP
+  - name: redis-cluster
+    port: 16379
+    targetPort: 16379
+    protocol: TCP
+  publishNotReadyAddresses: true

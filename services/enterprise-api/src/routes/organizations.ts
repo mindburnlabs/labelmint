@@ -9,6 +9,13 @@ import { generateApiKey } from '../utils/apiKeys';
 import { sendInviteEmail } from '../utils/email';
 import { AuditLogger } from '../utils/audit';
 
+// Custom domain validator
+const isDomain = (value: string) => {
+  if (!value) return true; // Optional field
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  return domainRegex.test(value);
+};
+
 const router = Router();
 
 // Get all organizations for user
@@ -164,7 +171,7 @@ router.get('/:id',
 router.post('/',
   authMiddleware,
   body('name').trim().isLength({ min: 3, max: 100 }),
-  body('domain').trim().optional().isDomain(),
+  body('domain').trim().optional().custom(isDomain),
   body('description').trim().optional().isLength({ max: 500 }),
   body('plan').isIn(['TRIAL', 'STARTER', 'PROFESSIONAL', 'ENTERPRISE']),
   validateRequest,

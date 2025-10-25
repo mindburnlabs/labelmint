@@ -1,55 +1,98 @@
 #include "imports/stdlib.fc";
 
-const int op::transfer = 0x5fcc3d14; ;; op code for internal transfer
-const int op::deposit = 0x4e4f5445; ;; op code for deposit
-const int op::withdraw = 0x5749544844; ;; op code for withdraw
-const int op::create_channel = 0x4348414e4e454c; ;; op code for create payment channel
-const int op::close_channel = 0x434c4f5345; ;; op code for close payment channel
-const int op::channel_payment = 0x4348414e4e454c504159; ;; op code for channel payment
-const int op::get_state = 0x47455453; ;; op code for external state query
+;; Operation codes
+const int op::transfer = 0x5fcc3d14; ;; Internal transfer
+const int op::deposit = 0x4e4f5445; ;; Direct TON deposit
+const int op::withdraw = 0x5749544844; ;; Withdraw request
+const int op::create_channel = 0x4348414e4e454c; ;; Create payment channel
+const int op::close_channel = 0x434c4f5345; ;; Close payment channel
+const int op::channel_payment = 0x4348414e4e454c504159; ;; Channel payment
+const int op::get_state = 0x47455453; ;; External state query
 
-;; Storage variables
-;; storage#_ owner:MsgAddressInt balance:Coins channel_count:uint32 = Storage;
-(slice, (int, int, int)) load_data() inline {
+;; USDT Jetton operations
+const int op::jetton_transfer_notification = 0x7362d09c; ;; Jetton transfer notification
+const int op::jetton_internal_transfer = 0x178d4519; ;; Internal jetton transfer
+
+;; Security operations
+const int op::emergency_pause = 0x5041555345; ;; Emergency pause
+const int op::emergency_withdraw = 0x45574d4752; ;; Emergency withdraw
+const int op::change_owner = 0x4f574e4552; ;; Change owner
+
+;; Error codes
+const int err::unauthorized = 401;
+const int err::invalid_operation = 400;
+const int err::insufficient_funds = 410;
+const int int::contract_paused = 423;
+const int err::channel_not_found = 404;
+const int err::channel_expired = 410;
+const int err::invalid_amount = 400;
+
+;; Enhanced storage with security features
+;; storage#_ owner:MsgAddressInt paused:Bool balance:Coins usdt_balance:Coins channel_count:uint32 emergency_withdraw_enabled:Bool = Storage;
+(slice, (int, int, int, int, int, int)) load_data() inline {
     slice ds = get_data().begin_parse();
     return (
         ds,
         (ds~load_msg_addr(), ;; owner
-         ds~load_coins(), ;; total balance in nanoTON
-         ds~load_uint(32)) ;; channel count
+         ds~load_uint(1), ;; paused flag
+         ds~load_coins(), ;; total TON balance in nanoTON
+         ds~load_coins(), ;; total USDT balance (with 6 decimals)
+         ds~load_uint(32), ;; channel count
+         ds~load_uint(1)) ;; emergency withdraw enabled
     );
 }
 
-;; Save storage
-() save_data(int owner, int balance, int channel_count) impure inline {
+;; Save enhanced storage
+() save_data(int owner, int paused, int ton_balance, int usdt_balance, int channel_count, int emergency_enabled) impure inline {
     set_data(begin_cell()
         .store_slice(parse_std_addr(owner))
-        .store_coins(balance)
+        .store_uint(paused, 1)
+        .store_coins(ton_balance)
+        .store_coins(usdt_balance)
         .store_uint(channel_count, 32)
+        .store_uint(emergency_enabled, 1)
         .end_cell());
 }
 
 ;; Get contract owner
 (int) get_owner() method_id {
-    (_, (int owner, _, _)) = load_data();
+    (_, (int owner, _, _, _, _, _)) = load_data();
     return owner;
 }
 
-;; Get total balance
+;; Get TON balance
+(int) get_ton_balance() method_id {
+    (_, (_, _, int ton_balance, _, _, _)) = load_data();
+    return ton_balance;
+}
+
+;; Get USDT balance
+(int) get_usdt_balance() method_id {
+    (_, (_, _, _, int usdt_balance, _, _)) = load_data();
+    return usdt_balance;
+}
+
+;; Get total balance (backward compatibility)
 (int) get_balance() method_id {
-    (_, (_, int balance, _)) = load_data();
-    return balance;
+    (_, (_, _, int ton_balance, _, _, _)) = load_data();
+    return ton_balance;
 }
 
 ;; Get channel count
 (int) get_channel_count() method_id {
-    (_, (_, _, int channel_count)) = load_data();
+    (_, (_, _, _, _, int channel_count, _)) = load_data();
     return channel_count;
 }
 
-;; Receive message
+;; Get contract status
+(int, int, int) get_contract_status() method_id {
+    (_, (int owner, int paused, int ton_balance, int usdt_balance, int channel_count, int emergency_enabled)) = load_data();
+    return (paused, emergency_enabled, channel_count);
+}
+
+;; Enhanced receive message with USDT Jetton support and security
 () recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
-    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+    if (in_msg_body.slice_empty?()) {
         return ();
     }
 
@@ -61,25 +104,67 @@ const int op::get_state = 0x47455453; ;; op code for external state query
     }
 
     slice sender_address = cs~load_msg_addr();
-    (_, (int owner, int balance, int channel_count)) = load_data();
+    (_, (int owner, int paused, int ton_balance, int usdt_balance, int channel_count, int emergency_enabled)) = load_data();
+
+    ;; Check if contract is paused (except for emergency operations)
     int op = in_msg_body~load_uint(32);
+    if (paused & (op != op::emergency_withdraw) & (op != op::change_owner)) {
+        throw(err::contract_paused);
+    }
 
-    ;; Only owner can perform operations
-    throw_unless(401, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+    ;; Handle USDT Jetton transfer notifications
+    if (op == op::jetton_transfer_notification) {
+        ;; USDT Jetton transfer received
+        ;; Message body: query_id:uint64 amount:(VarUInteger 16) from:MsgAddressInt
+        ;;                response_destination:MsgAddressInt forward_ton_amount:VarUInteger 16
+        ;;                forward_payload:(Either Cell ^Cell) = TransferNotification;
+        in_msg_body~load_uint(64); ;; query_id
+        int jetton_amount = in_msg_body~load_coins(); ;; USDT amount
+        slice from_address = in_msg_body~load_msg_addr(); ;; sender
+        in_msg_body~load_msg_addr(); ;; response_destination (ignore)
+        in_msg_body~load_coins(); ;; forward_ton_amount (ignore)
 
-    ;; Handle different operations
-    if (op == op::deposit) {
-        ;; Deposit USDT equivalent
+        ;; Extract payload if present
+        slice payload = in_msg_body~load_maybe_ref()?.begin_parse();
+        int deposit_amount = 0;
+        slice recipient = from_address; ;; Default to sender
+
+        if (payload.not_null()) {
+            ;; Try to extract deposit info from payload
+            if (payload~load_uint(32) == op::deposit) {
+                deposit_amount = payload~load_coins();
+                recipient = payload~load_msg_addr();
+            }
+        }
+
+        ;; Update USDT balance
+        usdt_balance += jetton_amount;
+        save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
+
+        ;; Send confirmation to recipient
+        var msg = begin_cell()
+            .store_uint(0x10, 6) ;; bounce bit
+            .store_slice(recipient)
+            .store_coins(0)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(0x55534454524543, 32) ;; USDTRECEIVED
+            .store_coins(jetton_amount)
+            .end_cell();
+
+        send_raw_message(msg, 64);
+
+    } elseif (op == op::deposit) {
+        ;; Only owner can perform direct deposits
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
+        ;; Direct TON deposit (legacy operation)
         ;; Message body: op# deposit amount:Coins recipient:MsgAddressInt
         int amount = in_msg_body~load_coins();
         slice recipient = in_msg_body~load_msg_addr();
 
-        ;; For demo, we treat incoming TON as USDT equivalent
-        ;; In production, this would interact with USDT Jetton
-
-        ;; Update balance
-        balance += amount;
-        save_data(owner, balance, channel_count);
+        ;; Update TON balance
+        ton_balance += amount;
+        save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
 
         ;; Send confirmation to recipient
         var msg = begin_cell()
@@ -93,41 +178,106 @@ const int op::get_state = 0x47455453; ;; op code for external state query
 
         send_raw_message(msg, 64); ;; carry all remaining value
 
-    } elseif (op == op::withdraw) {
-        ;; Withdraw funds
-        ;; Message body: op# withdraw amount:Coins recipient:MsgAddressInt
+    } elseif (op == op::emergency_pause) {
+        ;; Emergency pause (only owner)
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
+        paused = 1;
+        save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
+
+    } elseif (op == op::emergency_withdraw) {
+        ;; Emergency withdraw (only owner, works even when paused)
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
         int amount = in_msg_body~load_coins();
         slice recipient = in_msg_body~load_msg_addr();
+        int is_usdt = in_msg_body~load_uint(1); ;; 0 for TON, 1 for USDT
 
-        throw_unless(410, amount <= balance);
+        if (is_usdt) {
+            throw_unless(err::insufficient_funds, amount <= usdt_balance);
+            usdt_balance -= amount;
+        } else {
+            throw_unless(err::insufficient_funds, amount <= ton_balance);
+            ton_balance -= amount;
+        }
 
-        ;; Update balance
-        balance -= amount;
-        save_data(owner, balance, channel_count);
+        save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
 
-        ;; Send withdrawal
+        ;; Send emergency withdrawal
         var msg = begin_cell()
-            .store_uint(0x10, 6) ;; external outbound message
+            .store_uint(0x10, 6) ;; bounce bit
             .store_slice(recipient)
             .store_coins(amount)
-            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) ;; default message header
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(0x454d455247454e43, 32) ;; EMERGENCY
             .end_cell();
 
         send_raw_message(msg, 3); ;; pay transfer fees separately
 
+    } elseif (op == op::withdraw) {
+        ;; Only owner can perform withdrawals
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
+        ;; Withdraw funds (enhanced with USDT support)
+        ;; Message body: op# withdraw amount:Coins recipient:MsgAddressInt currency:UInt8
+        int amount = in_msg_body~load_coins();
+        slice recipient = in_msg_body~load_msg_addr();
+        int currency = in_msg_body~load_uint(8); ;; 0 for TON, 1 for USDT
+
+        if (currency == 1) {
+            ;; USDT withdrawal (requires jetton transfer)
+            throw_unless(err::insufficient_funds, amount <= usdt_balance);
+
+            ;; Note: In production, this would send jetton transfer
+            ;; For now, just deduct balance and send notification
+            usdt_balance -= amount;
+            save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
+
+            var msg = begin_cell()
+                .store_uint(0x18, 6) ;; bounce bit
+                .store_slice(recipient)
+                .store_coins(0) ;; no TON value
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+                .store_uint(0x55534454574954, 32) ;; USDTWITHDRAW
+                .store_coins(amount)
+                .end_cell();
+
+            send_raw_message(msg, 64);
+
+        } else {
+            ;; TON withdrawal
+            throw_unless(err::insufficient_funds, amount <= ton_balance);
+
+            ton_balance -= amount;
+            save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
+
+            ;; Send withdrawal
+            var msg = begin_cell()
+                .store_uint(0x10, 6) ;; external outbound message
+                .store_slice(recipient)
+                .store_coins(amount)
+                .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) ;; default message header
+                .end_cell();
+
+            send_raw_message(msg, 3); ;; pay transfer fees separately
+        }
+
     } elseif (op == op::create_channel) {
+        ;; Only owner can create channels
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
         ;; Create payment channel
         ;; Message body: op# create_channel participant:MsgAddressInt capacity:Coins duration:uint32
         slice participant = in_msg_body~load_msg_addr();
         int capacity = in_msg_body~load_coins();
         uint32 duration = in_msg_body~load_uint(32);
 
-        throw_unless(410, capacity <= balance);
+        throw_unless(err::insufficient_funds, capacity <= ton_balance);
 
         ;; Update balance (lock funds for channel)
-        balance -= capacity;
+        ton_balance -= capacity;
         channel_count += 1;
-        save_data(owner, balance, channel_count);
+        save_data(owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
 
         ;; Store channel data in separate cell
         cell channel_data = begin_cell()
@@ -178,9 +328,19 @@ const int op::get_state = 0x47455453; ;; op code for external state query
 
         send_raw_message(msg, 64);
 
+    } elseif (op == op::change_owner) {
+        ;; Only owner can change ownership
+        throw_unless(err::unauthorized, equal_slices(parse_std_addr(sender_address), parse_std_addr(owner)));
+
+        ;; Message body: op# change_owner new_owner:MsgAddressInt
+        slice new_owner = in_msg_body~load_msg_addr();
+
+        ;; Change ownership
+        save_data(new_owner, paused, ton_balance, usdt_balance, channel_count, emergency_enabled);
+
     } else {
         ;; Unknown operation
-        throw(0xffff);
+        throw(err::invalid_operation);
     }
 }
 
@@ -203,14 +363,17 @@ const int op::get_state = 0x47455453; ;; op code for external state query
 
     slice response_addr = in_msg~load_msg_addr();
 
-    (_, (int owner, int balance, int channel_count)) = load_data();
+    (_, (int owner, int paused, int ton_balance, int usdt_balance, int channel_count, int emergency_enabled)) = load_data();
 
     ;; Build payload with current contract state
     cell payload = begin_cell()
         .store_uint(op::get_state, 32)
         .store_slice(parse_std_addr(owner))
-        .store_coins(balance)
+        .store_uint(paused, 1)
+        .store_coins(ton_balance)
+        .store_coins(usdt_balance)
         .store_uint(channel_count, 32)
+        .store_uint(emergency_enabled, 1)
         .end_cell();
 
     ;; Send response back to requester

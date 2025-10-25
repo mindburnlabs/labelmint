@@ -5,8 +5,8 @@
   "main": "output/index.ts",
   "scripts": {
     "build": "tact -c tact.config.json",
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "vitest run --config ../vitest.blockchain.config.ts",
+    "test:watch": "vitest --config ../vitest.blockchain.config.ts",
     "clean": "rm -rf output",
     "compile": "pnpm run clean && pnpm run build",
     "deploy:testnet": "tsx deploy.ts testnet",
@@ -20,8 +20,10 @@
     "@ton/core": "^0.62.0",
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^13.11.2",
+    "@ton/sandbox": "^0.15.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^1.0.0"
   },
   "dependencies": {},
   "files": [

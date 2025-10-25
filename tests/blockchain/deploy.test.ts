@@ -1,8 +1,6 @@
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Blockchain, SandboxContract, TreasuryContract } from './mocks/ton-sandbox-mock';
 import { toNano } from '@ton/core';
 import { PaymentProcessor } from '../../contracts/output/PaymentProcessor_PaymentProcessor';
-import { beginCell } from '@ton/core';
-import '@ton/test-utils';
 
 describe('PaymentProcessor Deployment', () => {
   let blockchain: Blockchain;

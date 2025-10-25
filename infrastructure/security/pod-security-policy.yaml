@@ -1,10 +1,24 @@
-# Pod Security Policy for LabelMint
+# Pod Security Policies for LabelMint Production
+# ==============================================
+# Enforce security standards for all pods in production
+# ==============================================
+
+---
+# Restrictive Pod Security Policy for Application Pods
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
-  name: labelmint-psp
+  name: labelmint-restrictive
   labels:
     app: labelmint
+    component: security
+    policy: restrictive
+    environment: production
+  annotations:
+    description: "Restrictive PSP for application pods with minimal privileges"
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default,docker/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/defaultProfileName: 'runtime/default'
 spec:
   privileged: false
   allowPrivilegeEscalation: false
@@ -26,33 +40,371 @@ spec:
   readOnlyRootFilesystem: true
   securityContext:
     runAsNonRoot: true
-    runAsUser: 1000
-    fsGroup: 1000
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+    seccompProfile:
+      type: RuntimeDefault
+
 ---
-# Role for PSP
+# Pod Security Policy for Database Pods
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: labelmint-database
+  labels:
+    app: labelmint
+    component: security
+    policy: database
+    environment: production
+  annotations:
+    description: "PSP for database pods with required volume permissions"
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - NET_RAW
+    - KILL
+    - SYS_CHROOT
+    - SETUID
+    - SETGID
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  runAsUser:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 999
+        max: 999
+  seLinux:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 999
+        max: 999
+  readOnlyRootFilesystem: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+
+---
+# Pod Security Policy for Monitoring Pods
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: labelmint-monitoring
+  labels:
+    app: labelmint
+    component: security
+    policy: monitoring
+    environment: production
+  annotations:
+    description: "PSP for monitoring pods with host access requirements"
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - NET_RAW
+    - KILL
+    - SYS_CHROOT
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+    - 'hostPath'
+  allowedHostPaths:
+    - pathPrefix: '/proc'
+      readOnly: true
+    - pathPrefix: '/sys'
+      readOnly: true
+    - pathPrefix: '/'
+      readOnly: true
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: true
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+
+---
+# Role for restrictive PSP usage
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: labelmint-psp-role
-  namespace: labelmint
+  name: labelmint-restrictive-psp-user
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
 rules:
-  - apiGroups: ['policy']
-    resources: ['podsecuritypolicies']
-    verbs: ['use']
-    resourceNames:
-      - labelmint-psp
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - labelmint-restrictive
+
 ---
-# Role binding for PSP
+# RoleBinding for application service accounts
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: labelmint-psp-binding
-  namespace: labelmint
+  name: labelmint-web-psp
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: labelmint-web
+  namespace: production
+- kind: ServiceAccount
+  name: default
+  namespace: production
 roleRef:
   kind: Role
-  name: labelmint-psp-role
+  name: labelmint-restrictive-psp-user
   apiGroup: rbac.authorization.k8s.io
+
+---
+# RoleBinding for backend service accounts
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: labelmint-backend-psp
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
 subjects:
-  - kind: ServiceAccount
-    name: labelmint-service-account
-    namespace: labelmint
+- kind: ServiceAccount
+  name: labelmint-backend
+  namespace: production
+roleRef:
+  kind: Role
+  name: labelmint-restrictive-psp-user
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role for database PSP usage
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: labelmint-database-psp-user
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - labelmint-database
+
+---
+# RoleBinding for database service accounts
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: labelmint-database-psp
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: postgres
+  namespace: production
+roleRef:
+  kind: Role
+  name: labelmint-database-psp-user
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role for monitoring PSP usage
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: labelmint-monitoring-psp-user
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - labelmint-monitoring
+
+---
+# RoleBinding for monitoring service accounts
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: labelmint-monitoring-psp
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+- kind: ServiceAccount
+  name: grafana
+  namespace: monitoring
+- kind: ServiceAccount
+  name: node-exporter
+  namespace: monitoring
+roleRef:
+  kind: Role
+  name: labelmint-monitoring-psp-user
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Security Context Constraints (for OpenShift/OCP compatibility)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: labelmint-restrictive-scc
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+allowPrivilegedContainer: false
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+fsGroup:
+  type: MustRunAs
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- projected
+- secret
+users:
+- system:serviceaccount:production:labelmint-web
+- system:serviceaccount:production:labelmint-backend
+
+---
+# Resource Quotas for security compliance
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: labelmint-security-quota
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+spec:
+  hard:
+    count/pods: "100"
+    count/secrets: "50"
+    count/configmaps: "50"
+    count/persistentvolumeclaims: "20"
+    services: "20"
+    services.loadbalancers: "5"
+    count/deployments.apps: "30"
+    count/replicasets.apps: "60"
+
+---
+# Limit Ranges for security compliance
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: labelmint-security-limits
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+spec:
+  limits:
+  - default:
+      cpu: "500m"
+      memory: "512Mi"
+      ephemeral-storage: "1Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+      ephemeral-storage: "256Mi"
+    type: Container
+  - max:
+      cpu: "4000m"
+      memory: "4Gi"
+      ephemeral-storage: "10Gi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+      ephemeral-storage: "50Mi"
+    type: Container
+
+---
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-web-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: labelmint-web
+      component: frontend
+      environment: production
+
+---
+# Pod Disruption Budget for backend services
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: labelmint-backend-pdb
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    environment: production
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: labelmint-backend
+      component: backend
+      environment: production

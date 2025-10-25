@@ -1,30 +1,47 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PaymentManager } from '../services/payment-backend/src/services/payment/PaymentManager';
-import { TonWalletStrategy } from '../services/payment-backend/src/services/payment/strategies/TonWalletStrategy';
-import { UsdtStrategy } from '../services/payment-backend/src/services/payment/strategies/UsdtStrategy';
-import { postgresDb } from '../services/payment-backend/src/database';
+import { PaymentManager } from '@payment/PaymentManager';
+import { TonWalletStrategy } from '@payment/strategies/TonWalletStrategy';
+import { UsdtStrategy } from '@payment/strategies/UsdtStrategy';
+import { TransactionFactory } from '@test/factories';
 
 // Mock dependencies
-vi.mock('../services/payment-backend/src/database');
 vi.mock('@ton/ton');
 vi.mock('@ton/crypto');
+vi.mock('@payment/database', () => ({
+  postgresDb: {
+    query: vi.fn(),
+    $transaction: vi.fn()
+  }
+}));
 
 describe('Payment System Integration Tests', () => {
   let paymentManager: PaymentManager;
-  let mockPostgresDb: any;
+  let mockDatabase: any;
+  let mockRedis: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Mock database
-    mockPostgresDb = {
+    mockDatabase = {
       query: vi.fn(),
-      $transaction: vi.fn(),
+      transaction: vi.fn(),
+      connect: vi.fn()
     };
-    (postgresDb as any) = mockPostgresDb;
 
-    // Initialize payment manager with test config
+    // Mock Redis
+    mockRedis = {
+      get: vi.fn(),
+      set: vi.fn(),
+      del: vi.fn(),
+      exists: vi.fn(),
+      expire: vi.fn()
+    };
+
+    // Initialize payment manager with test configuration
     paymentManager = new PaymentManager({
+      database: mockDatabase,
+      redis: mockRedis,
       network: 'testnet',
       enableValidation: true,
       enableCaching: true,
@@ -50,7 +67,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,
@@ -81,7 +98,7 @@ describe('Payment System Integration Tests', () => {
       expect(result.transaction.status).toBe('pending');
 
       // Verify transaction was stored in database
-      expect(mockPostgresDb.query).toHaveBeenCalledWith(
+      expect(mockDatabase.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO transactions'),
         expect.arrayContaining([
           expect.any(String), // hash
@@ -107,7 +124,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,
@@ -143,7 +160,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,
@@ -181,7 +198,7 @@ describe('Payment System Integration Tests', () => {
       expect(result.transaction.status).toBe('pending');
 
       // Verify transaction was stored in database
-      expect(mockPostgresDb.query).toHaveBeenCalledWith(
+      expect(mockDatabase.query).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO transactions'),
         expect.arrayContaining([
           expect.any(String), // hash
@@ -207,7 +224,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,
@@ -263,7 +280,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,
@@ -310,7 +327,7 @@ describe('Payment System Integration Tests', () => {
       const usdtTxHash = '0xabcdef1234567890';
 
       // Mock transaction lookup
-      mockPostgresDb.query
+      mockDatabase.query
         .mockResolvedValueOnce({
           rows: [{
             hash: tonTxHash,
@@ -355,7 +372,7 @@ describe('Payment System Integration Tests', () => {
       const address = 'EQDA5Z8HHHiKbZxhTqJKkFvQRfq8rhxBuC6hncmjhA3eSKqF';
 
       // Mock transaction history
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [
           {
             hash: '0x1234567890abcdef',
@@ -418,7 +435,7 @@ describe('Payment System Integration Tests', () => {
       };
 
       // Mock wallet lookup
-      mockPostgresDb.query.mockResolvedValue({
+      mockDatabase.query.mockResolvedValue({
         rows: [{
           id: 1,
           user_id: 123,

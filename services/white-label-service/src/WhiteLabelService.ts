@@ -270,7 +270,7 @@ export class WhiteLabelService {
    * Setup static asset serving for tenant
    */
   public async setupTenantAssets(tenantId: string): Promise<void> {
-    const config = this.tenantConfigs.get(tenantId);
+    let config = this.tenantConfigs.get(tenantId);
     if (!config) {
       config = await this.loadTenantConfig(tenantId);
       this.tenantConfigs.set(tenantId, config);

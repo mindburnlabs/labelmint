@@ -1,0 +1,401 @@
+# Security Monitoring and Alerting Rules for LabelMint Production
+# ==============================================================
+
+groups:
+  - name: authentication-security
+    interval: 30s
+    rules:
+      # Brute Force Attack Detection
+      - alert: BruteForceAttackDetected
+        expr: |
+          (
+            sum(rate(labelmint_auth_failures_total[5m])) by (ip_address) > 10
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: security
+          service: authentication
+          attack_type: brute_force
+        annotations:
+          summary: "Brute force attack detected from IP {{ $labels.ip_address }}"
+          description: "{{ $value }} failed authentication attempts per minute from {{ $labels.ip_address }}"
+          runbook_url: "https://runbooks.labelmint.it/security/brute-force-attack"
+
+      - alert: SuspiciousLoginPattern
+        expr: |
+          (
+            sum(rate(labelmint_auth_failures_total[1h])) by (user_id) > 20
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+          service: authentication
+          attack_type: credential_stuffing
+        annotations:
+          summary: "Suspicious login pattern for user {{ $labels.user_id }}"
+          description: "{{ $value }} failed login attempts for user {{ $labels.user_id }} in the last hour"
+          runbook_url: "https://runbooks.labelmint.it/security/suspicious-login"
+
+      # Account Security
+      - alert: MultipleAccountTakeoverAttempts
+        expr: |
+          (
+            sum(rate(labelmint_account_takeover_attempts_total[10m])) > 5
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+          service: account-security
+        annotations:
+          summary: "Multiple account takeover attempts detected"
+          description: "{{ $value }} account takeover attempts in the last 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/security/account-takeover"
+
+      - alert: PrivilegeEscalationAttempt
+        expr: |
+          (
+            sum(rate(labelmint_privilege_escalation_attempts_total[5m])) > 0
+          )
+        for: 0s
+        labels:
+          severity: critical
+          team: security
+          service: authorization
+        annotations:
+          summary: "Privilege escalation attempt detected"
+          description: "Privilege escalation attempt detected. Immediate security investigation required!"
+          runbook_url: "https://runbooks.labelmint.it/security/privilege-escalation"
+
+  - name: api-security
+    interval: 30s
+    rules:
+      # API Abuse Detection
+      - alert: APIAbuseDetected
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api-gateway"}[5m])) by (ip_address) > 100
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+          service: api-gateway
+          attack_type: api_abuse
+        annotations:
+          summary: "API abuse detected from IP {{ $labels.ip_address }}"
+          description: "{{ $value }} requests per minute from {{ $labels.ip_address }} exceeds normal usage"
+          runbook_url: "https://runbooks.labelmint.it/security/api-abuse"
+
+      - alert: PotentialDDoSAttack
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api-gateway"}[1m])) > 1000
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: security
+          service: api-gateway
+          attack_type: ddos
+        annotations:
+          summary: "Potential DDoS attack detected"
+          description: "{{ $value }} requests per minute across all endpoints. DDoS attack likely!"
+          runbook_url: "https://runbooks.labelmint.it/security/ddos-attack"
+
+      - alert: SuspiciousAPIEndpoints
+        expr: |
+          (
+            sum(rate(http_requests_total{endpoint=~"*(admin|debug|internal)*"}[5m])) by (ip_address) > 5
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: security
+          service: api-gateway
+          attack_type: reconnaissance
+        annotations:
+          summary: "Access to sensitive API endpoints from {{ $labels.ip_address }}"
+          description: "Unusual access to administrative or internal endpoints detected"
+          runbook_url: "https://runbooks.labelmint.it/security/sensitive-endpoint-access"
+
+      # Data Exfiltration Detection
+      - alert: PotentialDataExfiltration
+        expr: |
+          (
+            sum(rate(http_response_size_bytes{service="api-gateway"}[5m])) by (ip_address) > 100000000
+          )
+        for: 3m
+        labels:
+          severity: critical
+          team: security
+          service: api-gateway
+          attack_type: data_exfiltration
+        annotations:
+          summary: "Potential data exfiltration from {{ $labels.ip_address }}"
+          description: "High data transfer volume: {{ $value | humanize1024 }}/minute from single IP"
+          runbook_url: "https://runbooks.labelmint.it/security/data-exfiltration"
+
+  - name: blockchain-security
+    interval: 60s
+    rules:
+      # TON Blockchain Security Monitoring
+      - alert: SuspiciousBlockchainActivity
+        expr: |
+          (
+            sum(rate(labelmint_ton_transactions_failed_total[5m])) > 5
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: ton-blockchain
+        annotations:
+          summary: "High blockchain transaction failure rate"
+          description: "{{ $value }} failed transactions per minute. Possible blockchain issues"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/transaction-failures"
+
+      - alert: LargeValueTransactionAlert
+        expr: |
+          (
+            max(labelmint_ton_transaction_amount) > 10000
+          )
+        for: 0s
+        labels:
+          severity: warning
+          team: finance
+          service: ton-blockchain
+        annotations:
+          summary: "Large value transaction detected"
+          description: "Transaction amount: {{ $value }} USDT. Manual review required"
+          runbook_url: "https://runbooks.labelmint.it/finance/large-transaction"
+
+      - alert: WalletAnomalyDetected
+        expr: |
+          (
+            sum(rate(labelmint_wallet_transactions_total[10m])) by (wallet_id) > 20
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: ton-blockchain
+        annotations:
+          summary: "Unusual wallet activity detected"
+          description: "Wallet {{ $labels.wallet_id }} has {{ $value }} transactions in 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/wallet-anomaly"
+
+  - name: payment-security
+    interval: 30s
+    rules:
+      # Payment Fraud Detection
+      - alert: PaymentFraudSuspected
+        expr: |
+          (
+            sum(rate(labelmint_payment_chargebacks_total[1h])) > 2
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: finance
+          service: payment-processing
+          attack_type: payment_fraud
+        annotations:
+          summary: "Payment fraud suspected"
+          description: "{{ $value }} chargebacks in the last hour. Fraud investigation required"
+          runbook_url: "https://runbooks.labelmint.it/finance/payment-fraud"
+
+      - alert: MultiplePaymentFailures
+        expr: |
+          (
+            sum(rate(labelmint_payment_failures_total[5m])) by (user_id) > 5
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-processing
+        annotations:
+          summary: "Multiple payment failures for user {{ $labels.user_id }}"
+          description: "{{ $value }} payment failures in 5 minutes. Possible payment issue"
+          runbook_url: "https://runbooks.labelmint.it/finance/payment-failures"
+
+      - alert: SuspiciousPaymentPattern
+        expr: |
+          (
+            sum(rate(labelmint_payment_amount_total[10m])) by (ip_address) > 5000
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-processing
+        annotations:
+          summary: "Suspicious payment pattern from {{ $labels.ip_address }}"
+          description: "High payment volume: ${{ $value }} in 10 minutes from single IP"
+          runbook_url: "https://runbooks.labelmint.it/finance/suspicious-payments"
+
+  - name: infrastructure-security
+    interval: 60s
+    rules:
+      # Infrastructure Security Monitoring
+      - alert: UnusualSSHLogin
+        expr: |
+          (
+            sum(rate(labelmint_ssh_logins_total[10m])) by (ip_address) > 3
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: devops
+          service: infrastructure
+        annotations:
+          summary: "Unusual SSH login activity from {{ $labels.ip_address }}"
+          description: "{{ $value }} SSH login attempts from {{ $labels.ip_address }} in 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/infrastructure/ssh-login"
+
+      - alert: PortScanDetected
+        expr: |
+          (
+            sum(rate(labelmint_port_scan_attempts_total[5m])) > 50
+          )
+        for: 1m
+        labels:
+          severity: warning
+          team: security
+          service: infrastructure
+          attack_type: reconnaissance
+        annotations:
+          summary: "Port scan activity detected"
+          description: "{{ $value }} port scan attempts in the last 5 minutes"
+          runbook_url: "https://runbooks.labelmint.it/security/port-scan"
+
+      - alert: SSLCertificateExpiry
+        expr: |
+          (
+            probe_ssl_earliest_cert_expiry - time() < 86400 * 7
+          )
+        for: 1h
+        labels:
+          severity: warning
+          team: devops
+          service: ssl-certificates
+        annotations:
+          summary: "SSL certificate expiring soon"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+          runbook_url: "https://runbooks.labelmint.it/infrastructure/ssl-expiry"
+
+      - alert: SSLCertificateExpired
+        expr: |
+          (
+            probe_ssl_earliest_cert_expiry - time() < 0
+          )
+        for: 0s
+        labels:
+          severity: critical
+          team: devops
+          service: ssl-certificates
+        annotations:
+          summary: "SSL certificate expired"
+          description: "SSL certificate for {{ $labels.instance }} has expired!"
+          runbook_url: "https://runbooks.labelmint.it/infrastructure/ssl-expired"
+
+  - name: data-security
+    interval: 300s
+    rules:
+      # Data Security and Privacy
+      - alert: UnauthorizedDataAccess
+        expr: |
+          (
+            sum(rate(labelmint_unauthorized_data_access_total[1h])) > 0
+          )
+        for: 0s
+        labels:
+          severity: critical
+          team: security
+          service: data-access
+        annotations:
+          summary: "Unauthorized data access detected"
+          description: "Unauthorized access to sensitive data detected. Immediate investigation required!"
+          runbook_url: "https://runbooks.labelmint.it/security/unauthorized-access"
+
+      - alert: DataLeakageSuspected
+        expr: |
+          (
+            sum(rate(labelmint_data_export_total[1h])) by (user_id) > 1000
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: security
+          service: data-export
+        annotations:
+          summary: "Potential data leakage by user {{ $labels.user_id }}"
+          description: "User {{ $labels.user_id }} exported {{ $value }} records in the last hour"
+          runbook_url: "https://runbooks.labelmint.it/security/data-leakage"
+
+      - alert: PIIAccessAnomaly
+        expr: |
+          (
+            sum(rate(labelmint_pii_access_total[30m])) by (user_id) > 100
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+          service: pii-access
+        annotations:
+          summary: "Unusual PII access pattern for user {{ $labels.user_id }}"
+          description: "User {{ $labels.user_id }} accessed {{ $value }} PII records in 30 minutes"
+          runbook_url: "https://runbooks.labelmint.it/security/pii-access-anomaly"
+
+  - name: compliance-monitoring
+    interval: 300s
+    rules:
+      # Compliance and Audit Monitoring
+      - alert: AuditLogFailure
+        expr: |
+          (
+            sum(rate(labelmint_audit_log_failures_total[1h])) > 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: compliance
+          service: audit-logging
+        annotations:
+          summary: "Audit logging failures detected"
+          description: "{{ $value }} audit log failures in the last hour. Compliance risk!"
+          runbook_url: "https://runbooks.labelmint.it/compliance/audit-failure"
+
+      - alert: GDPRDataRetentionBreach
+        expr: |
+          (
+            sum(labelmint_user_data_age_days) > 365
+          )
+        for: 1h
+        labels:
+          severity: warning
+          team: compliance
+          service: data-retention
+        annotations:
+          summary: "GDPR data retention policy breach"
+          description: "{{ $value }} user records exceed 365-day retention limit"
+          runbook_url: "https://runbooks.labelmint.it/compliance/gdpr-retention"
+
+      - alert: SecurityPatchMissing
+        expr: |
+          (
+            sum(labelmint_security_patches_outstanding) > 5
+          )
+        for: 1h
+        labels:
+          severity: warning
+          team: security
+          service: patch-management
+        annotations:
+          summary: "Security patches pending deployment"
+          description: "{{ $value }} security patches awaiting deployment"
+          runbook_url: "https://runbooks.labelmint.it/security/patch-management"

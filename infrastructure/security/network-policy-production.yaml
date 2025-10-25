@@ -1,0 +1,626 @@
+# Production Network Policies for LabelMint
+# ========================================
+# Zero-trust network security with microsegmentation
+# ========================================
+
+---
+# Deny all ingress traffic by default (deny-all policy)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: deny-all
+    environment: production
+  annotations:
+    description: "Deny all ingress traffic by default - explicit allow required"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+
+---
+# Deny all egress traffic by default (deny-all policy)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-egress
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: deny-all
+    environment: production
+  annotations:
+    description: "Deny all egress traffic by default - explicit allow required"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+
+---
+# Allow DNS resolution for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-dns
+    environment: production
+  annotations:
+    description: "Allow DNS resolution for all pods"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Allow traffic from Ingress controller to web application
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-web
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-ingress-web
+    environment: production
+  annotations:
+    description: "Allow traffic from Ingress controller to web application"
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint-web
+      component: frontend
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 3002
+  egress:
+  # Allow web app to connect to backend services
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint-backend
+          component: backend
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 3001
+  # Allow web app to connect to external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# Allow traffic from web application to backend services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-ingress
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-backend-ingress
+    environment: production
+  annotations:
+    description: "Allow traffic from web application to backend services"
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint-backend
+      component: backend
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from web application
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint-web
+          component: frontend
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 3001
+  # Allow traffic from API Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint-api-gateway
+          component: gateway
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 3001
+  # Allow traffic from monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9091
+  egress:
+  # Allow backend to connect to database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+          component: database
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow backend to connect to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+          component: cache
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow backend to connect to external services (TON blockchain, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# Database network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-access
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-database
+    environment: production
+  annotations:
+    description: "Allow only backend services to access database"
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+      component: database
+      environment: production
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow only backend services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint-backend
+          component: backend
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow backup jobs
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: backup
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9187
+
+---
+# Redis network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-access
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-redis
+    environment: production
+  annotations:
+    description: "Allow only backend services to access Redis"
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+      component: cache
+      environment: production
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow only backend services
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint-backend
+          component: backend
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow backup jobs
+  - from:
+    - podSelector:
+        matchLabels:
+          app: labelmint
+          component: backup
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow monitoring
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9121
+
+---
+# Monitoring network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-monitoring
+    environment: production
+  annotations:
+    description: "Allow monitoring to collect metrics from all pods"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow monitoring namespace to access all pods for metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+    - protocol: TCP
+      port: 9100
+
+---
+# API Gateway network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-gateway
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-api-gateway
+    environment: production
+  annotations:
+    description: "Allow API Gateway to route traffic to backend services"
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint-api-gateway
+      component: gateway
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow API Gateway to connect to backend services
+  - to:
+    - podSelector:
+        matchLabels:
+          app: labelmint-backend
+          component: backend
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 3001
+
+---
+# External API access policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-apis
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-external-apis
+    environment: production
+  annotations:
+    description: "Allow access to specific external APIs only"
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Egress
+  egress:
+  # Allow TON blockchain access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+    # You can also restrict by specific domains using Calico or Cilium
+  # Allow payment processors
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow CDN access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# SSH/Admin access policy (restrictive)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-admin-access
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-admin
+    environment: production
+  annotations:
+    description: "Allow admin access from specific IP ranges only"
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow SSH only from specific IP ranges (example - replace with your actual admin IPs)
+  - from:
+    - ipBlock:
+        cidr: 203.0.113.0/24  # Replace with your admin IP range
+    ports:
+    - protocol: TCP
+      port: 22
+  # Allow admin access from bastion hosts
+  - from:
+    - podSelector:
+        matchLabels:
+          role: bastion
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 22
+    - protocol: TCP
+      port: 443
+
+---
+# Inter-namespace communication policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-inter-namespace
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-inter-namespace
+    environment: production
+  annotations:
+    description: "Control communication between namespaces"
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Egress
+  egress:
+  # Allow traffic to staging namespace for testing (if needed)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: staging
+    ports:
+    - protocol: TCP
+      port: 3001
+    - protocol: TCP
+      port: 3002
+  # Allow traffic to monitoring namespace
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 9091
+
+---
+# Log aggregation network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-log-aggregation
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-logs
+    environment: production
+  annotations:
+    description: "Allow pods to send logs to Loki/log aggregation"
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Egress
+  egress:
+  # Allow traffic to Loki
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 3100
+    - protocol: UDP
+      port: 3100
+
+---
+# Certificate management policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cert-manager
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-cert-manager
+    environment: production
+  annotations:
+    description: "Allow cert-manager to validate certificates"
+spec:
+  podSelector:
+    matchLabels:
+      environment: production
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow cert-manager to solve ACME challenges
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: cert-manager
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+
+---
+# Backup network policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backup-operations
+  namespace: production
+  labels:
+    app: labelmint
+    component: security
+    policy: allow-backup
+    environment: production
+  annotations:
+    description: "Allow backup jobs to access services and external storage"
+spec:
+  podSelector:
+    matchLabels:
+      app: labelmint
+      component: backup
+      environment: production
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  # Allow backup jobs to access database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+          component: database
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow backup jobs to access Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+          component: cache
+          environment: production
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow backup jobs to access S3
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow backup jobs to access external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80

@@ -1,0 +1,140 @@
+# Production Tempo Configuration for Distributed Tracing
+# =====================================================
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9096
+  log_level: info
+  log_format: logfmt
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+          cors:
+            allowed_origins:
+              - https://labelmint.it
+              - https://app.labelmint.it
+              - https://admin.labelmint.it
+            allowed_headers: "*"
+        grpc:
+          endpoint: 0.0.0.0:4317
+    jaeger:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:14250
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+    zipkin:
+      endpoint: 0.0.0.0:9411
+
+  log_received_spans:
+    enabled: true
+    include_all_attributes: true
+
+ingester:
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: memberlist
+      replication_factor: 1
+    tokens_file_path: /tmp/tokens
+  max_transfer_retries: 0
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_block_duration: 1m
+  flush_check_period: 1s
+
+compactor:
+  compaction:
+    compaction_window: 1h
+    max_compaction_objects: 1000000
+    chunk_size_bytes: 5242880
+    block_retention: 336h
+    retention_concurrency: 10
+    overwrite_block_version: "v1"
+  ring:
+    kvstore:
+      store: memberlist
+
+metrics_generator:
+  registry:
+    external_labels:
+      cluster: labelmint-production
+      namespace: monitoring
+  processor:
+    service_graphs:
+      enabled: true
+      max_items: 10000
+      wait: 10s
+      workers: 10
+      dimensions:
+        - service
+        - status_code
+        - span_name
+    span_metrics:
+      enabled: true
+      dimensions:
+        - service
+        - span_name
+        - span_kind
+        - status_code
+    local_blocks:
+      enabled: true
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  per_tenant_override_config: /overrides.yaml
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: labelmint-traces
+      endpoint: s3.amazonaws.com
+      region: us-east-1
+      access_key_id: ${AWS_ACCESS_KEY_ID}
+      secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+      insecure: false
+      s3forcepathstyle: false
+    block:
+      bloom_filter_false_positive: .01
+      v2_encoding: zstd
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+query_frontend:
+  search:
+    external_backend: s3
+    external_endpoints:
+      - s3://labelmint-traces-search-index
+  max_bytes_per_trace: 1_000_000
+
+querier:
+  frontend_worker:
+    grpc_client_config:
+      max_recv_msg_size: 104857600
+  max_concurrent_queries: 20
+  trace_by_id:
+    query_timeout: 10s
+
+memberlist:
+  join_members:
+    - tempo:7946
+  abort_if_cluster_join_fails: false
+
+limits:
+  per_tenant:
+    max_traces_per_user: 10000
+    max_global_traces_per_user: 100000
+    max_bytes_per_trace: 20000000
+    max_search_bytes_per_trace: 5000000
+    otlp_max_request_bytes: 4194304

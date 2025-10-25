@@ -1,0 +1,261 @@
+# Business Metrics Alerting Rules for LabelMint Production
+# =========================================================
+
+groups:
+  - name: business-metrics
+    interval: 30s
+    rules:
+      # User Activity Alerts
+      - alert: LowActiveUsers
+        expr: labelmint:active_users:rate_5m < 10
+        for: 5m
+        labels:
+          severity: warning
+          team: product
+          service: user-engagement
+        annotations:
+          summary: "Low active user count detected"
+          description: "Only {{ $value }} active users in the last 5 minutes. Expected minimum is 10."
+          runbook_url: "https://runbooks.labelmint.it/business/low-active-users"
+
+      - alert: CriticalUserActivityDrop
+        expr: |
+          (
+            labelmint:active_users:rate_5m <
+            (labelmint:active_users:rate_1h_offset_1h * 0.5)
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: product
+          service: user-engagement
+        annotations:
+          summary: "Critical drop in user activity"
+          description: "User activity dropped by more than 50% compared to last hour. Current: {{ $value }}, Previous hour: {{ query \"labelmint:active_users:rate_1h_offset_1h\" }}"
+          runbook_url: "https://runbooks.labelmint.it/business/user-activity-drop"
+
+      # Task Completion Metrics
+      - alert: LowTaskCompletionRate
+        expr: labelmint:task_completion_rate:5m < 70
+        for: 10m
+        labels:
+          severity: warning
+          team: operations
+          service: task-processing
+        annotations:
+          summary: "Low task completion rate"
+          description: "Task completion rate is {{ $value }}%. Expected minimum is 70%."
+          runbook_url: "https://runbooks.labelmint.it/operations/low-task-completion"
+
+      - alert: CriticalTaskCompletionFailure
+        expr: labelmint:task_completion_rate:5m < 30
+        for: 3m
+        labels:
+          severity: critical
+          team: operations
+          service: task-processing
+        annotations:
+          summary: "Critical task completion failure"
+          description: "Task completion rate has collapsed to {{ $value }}%. Immediate investigation required!"
+          runbook_url: "https://runbooks.labelmint.it/operations/task-completion-failure"
+
+      # Payment Processing Alerts
+      - alert: PaymentProcessingFailure
+        expr: labelmint:payment_success_rate:5m < 90
+        for: 5m
+        labels:
+          severity: critical
+          team: finance
+          service: payment-processing
+        annotations:
+          summary: "Payment processing failure detected"
+          description: "Payment success rate is {{ $value }}%. Expected minimum is 90%."
+          runbook_url: "https://runbooks.labelmint.it/finance/payment-processing-failure"
+
+      - alert: HighPaymentFailureRate
+        expr: |
+          (
+            (100 - labelmint:payment_success_rate:5m) > 10
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: finance
+          service: payment-processing
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value }}%. This requires immediate attention."
+          runbook_url: "https://runbooks.labelmint.it/finance/high-payment-failure"
+
+      # Revenue Monitoring
+      - alert: RevenueDrop
+        expr: |
+          (
+            sum(rate(labelmint_revenue_total[5m])) <
+            (sum(rate(labelmint_revenue_total[5m] offset 1h)) * 0.7)
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: finance
+          service: revenue-tracking
+        annotations:
+          summary: "Revenue drop detected"
+          description: "Revenue has dropped by more than 30% compared to last hour."
+          runbook_url: "https://runbooks.labelmint.it/finance/revenue-drop"
+
+      # User Registration Metrics
+      - alert: LowUserRegistrations
+        expr: |
+          (
+            sum(rate(labelmint_user_registrations_total[1h])) < 5
+          )
+        for: 30m
+        labels:
+          severity: warning
+          team: marketing
+          service: user-acquisition
+        annotations:
+          summary: "Low user registration rate"
+          description: "Only {{ $value }} new users per hour. Expected minimum is 5."
+          runbook_url: "https://runbooks.labelmint.it/marketing/low-registrations"
+
+      # Customer Support Metrics
+      - alert: HighSupportTicketVolume
+        expr: |
+          (
+            sum(rate(labelmint_support_tickets_created_total[5m])) > 10
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: support
+          service: customer-support
+        annotations:
+          summary: "High support ticket volume"
+          description: "{{ $value }} support tickets created per minute. Team capacity may be exceeded."
+          runbook_url: "https://runbooks.labelmint.it/support/high-ticket-volume"
+
+      - alert: CriticalSupportTicketBacklog
+        expr: |
+          (
+            sum(labelmint_support_tickets_open_total) > 100
+          )
+        for: 15m
+        labels:
+          severity: critical
+          team: support
+          service: customer-support
+        annotations:
+          summary: "Critical support ticket backlog"
+          description: "{{ $value }} open support tickets. SLA breach risk!"
+          runbook_url: "https://runbooks.labelmint.it/support/ticket-backlog"
+
+  - name: user-experience-metrics
+    interval: 60s
+    rules:
+      # User Experience Alerts
+      - alert: HighPageLoadTime
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 2
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: frontend
+          service: user-experience
+        annotations:
+          summary: "High page load time"
+          description: "95th percentile page load time is {{ $value }} seconds. Target is < 2s."
+          runbook_url: "https://runbooks.labelmint.it/frontend/high-page-load-time"
+
+      - alert: CriticalUserExperienceDegradation
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 5
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: frontend
+          service: user-experience
+        annotations:
+          summary: "Critical user experience degradation"
+          description: "95th percentile page load time is {{ $value }} seconds. Users are experiencing significant delays!"
+          runbook_url: "https://runbooks.labelmint.it/frontend/ux-degradation"
+
+      - alert: HighBounceRate
+        expr: |
+          (
+            sum(rate(labelmint_page_bounces_total[5m])) /
+            sum(rate(labelmint_page_views_total[5m])) * 100
+          ) > 70
+        for: 10m
+        labels:
+          severity: warning
+          team: product
+          service: user-engagement
+        annotations:
+          summary: "High bounce rate detected"
+          description: "Bounce rate is {{ $value }}%. Optimal range is 30-50%."
+          runbook_url: "https://runbooks.labelmint.it/product/high-bounce-rate"
+
+      - alert: LowUserSatisfactionScore
+        expr: |
+          (
+            avg(labelmint_user_satisfaction_score) < 3.5
+          )
+        for: 1h
+        labels:
+          severity: warning
+          team: product
+          service: user-satisfaction
+        annotations:
+          summary: "Low user satisfaction score"
+          description: "Average user satisfaction score is {{ $value }}/5. Target is > 4.0."
+          runbook_url: "https://runbooks.labelmint.it/product/low-satisfaction-score"
+
+  - name: conversion-metrics
+    interval: 300s
+    rules:
+      # Conversion Funnel Alerts
+      - alert: LowConversionRate
+        expr: |
+          (
+            (
+              sum(rate(labelmint_conversions_completed_total[30m])) /
+              sum(rate(labelmint_conversions_started_total[30m]))
+            ) * 100
+          ) < 2
+        for: 30m
+        labels:
+          severity: warning
+          team: marketing
+          service: conversion-optimization
+        annotations:
+          summary: "Low conversion rate"
+          description: "Conversion rate is {{ $value }}%. Expected minimum is 2%."
+          runbook_url: "https://runbooks.labelmint.it/marketing/low-conversion-rate"
+
+      - alert: CartAbandonmentSpike
+        expr: |
+          (
+            (
+              sum(rate(labelmint_cart_abandoned_total[10m])) /
+              sum(rate(labelmint_cart_created_total[10m]))
+            ) * 100
+          ) > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: product
+          service: checkout-flow
+        annotations:
+          summary: "Cart abandonment spike"
+          description: "Cart abandonment rate is {{ $value }}%. Normal range is 60-70%."
+          runbook_url: "https://runbooks.labelmint.it/product/cart-abandonment"

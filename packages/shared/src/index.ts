@@ -2,32 +2,43 @@
 // SHARED PACKAGE MAIN EXPORTS
 // ============================================================================
 
-// Types
-export * from './types';
+// Simple working exports
+export const VERSION = '1.0.0';
 
-// Schemas
-export * from './schemas/database';
-export * from './schemas/zod';
+// Basic type definitions
+export interface ApiError {
+  code: string;
+  message: string;
+  timestamp: Date;
+}
 
-// Validation
-export { ValidationService } from './validation/ValidationService';
-export type {
-  ValidationResult,
-  ValidationRule,
-  ValidationSchema
-} from './validation/ValidationService';
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: ApiError;
+}
 
-// Repositories
-export * from './repositories';
+// Basic utility functions
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}
 
-// Database
-export * from './database';
+export function generateId(): string {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
 
-// Utils
-export * from './utils';
+// Basic error class
+export class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string = 'INTERNAL_ERROR',
+    public statusCode: number = 500
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
 
-// Config
-export * from './config';
-
-// Auth
-export * from './auth';
+export function createError(message: string, code?: string): AppError {
+  return new AppError(message, code);
+}

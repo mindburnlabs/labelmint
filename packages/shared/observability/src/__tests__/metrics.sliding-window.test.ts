@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Summary } from '../metrics';
 
 describe('Sliding Window Summary Metrics', () => {
@@ -10,7 +11,7 @@ describe('Sliding Window Summary Metrics', () => {
   describe('Basic Sliding Window Functionality', () => {
     it('should track values within the sliding window', () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       // Add some values
       summary.observe(10);
@@ -25,7 +26,7 @@ describe('Sliding Window Summary Metrics', () => {
 
     it('should expire values outside the sliding window', async () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       // Set a short window for testing
       summary.setSlidingWindow(1000, 2); // 1 second window
@@ -38,7 +39,7 @@ describe('Sliding Window Summary Metrics', () => {
       expect(result.metadata?.count).toBe(2);
 
       // Advance time beyond window
-      jest.spyOn(Date, 'now').mockReturnValue(now + 1500);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 1500);
 
       // Add new value
       summary.observe(30);
@@ -50,7 +51,7 @@ describe('Sliding Window Summary Metrics', () => {
 
     it('should handle cleanup when ageBuckets threshold is reached', () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       // Set window with frequent cleanup
       summary.setSlidingWindow(10000, 10); // 10 seconds, 10 buckets = cleanup every 1 second
@@ -64,7 +65,7 @@ describe('Sliding Window Summary Metrics', () => {
       expect(result.metadata?.count).toBe(5);
 
       // Advance time to trigger cleanup
-      jest.spyOn(Date, 'now').mockReturnValue(now + 1100);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 1100);
 
       // Add another value (this should trigger cleanup)
       summary.observe(5);
@@ -109,7 +110,7 @@ describe('Sliding Window Summary Metrics', () => {
   describe('Labels Handling', () => {
     it('should maintain separate sliding windows for different labels', () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.setSlidingWindow(5000, 5);
 
@@ -131,7 +132,7 @@ describe('Sliding Window Summary Metrics', () => {
 
     it('should expire values separately for different label combinations', async () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.setSlidingWindow(1000, 2);
 
@@ -139,7 +140,7 @@ describe('Sliding Window Summary Metrics', () => {
       summary.observe(10, { method: 'GET' });
 
       // Advance time
-      jest.spyOn(Date, 'now').mockReturnValue(now + 500);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 500);
 
       summary.observe(20, { method: 'POST' });
 
@@ -150,7 +151,7 @@ describe('Sliding Window Summary Metrics', () => {
       expect(postResult.metadata?.count).toBe(1);
 
       // Advance time beyond window for GET but not POST
-      jest.spyOn(Date, 'now').mockReturnValue(now + 1500);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 1500);
 
       // Add another value to trigger cleanup
       summary.observe(30, { method: 'PUT' });
@@ -171,12 +172,12 @@ describe('Sliding Window Summary Metrics', () => {
 
       // Verify configuration is set (indirectly through behavior)
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.observe(10);
 
       // Advance time by 5 seconds (30/6)
-      jest.spyOn(Date, 'now').mockReturnValue(now + 5000);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 5000);
 
       summary.observe(20);
 
@@ -198,7 +199,7 @@ describe('Sliding Window Summary Metrics', () => {
   describe('Memory Management', () => {
     it('should clean up old values to prevent memory leaks', () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.setSlidingWindow(100, 2); // Very short window for testing
 
@@ -207,7 +208,7 @@ describe('Sliding Window Summary Metrics', () => {
         summary.observe(i);
 
         // Advance time slightly for each value
-        jest.spyOn(Date, 'now').mockReturnValue(now + i * 2);
+        vi.spyOn(Date, 'now').mockReturnValue(now + i * 2);
       }
 
       // Should only have recent values in memory
@@ -218,14 +219,14 @@ describe('Sliding Window Summary Metrics', () => {
 
     it('should handle edge case when all values are expired', () => {
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.setSlidingWindow(100, 2);
 
       summary.observe(10);
 
       // Advance time far beyond window
-      jest.spyOn(Date, 'now').mockReturnValue(now + 1000);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 1000);
 
       // Add value to trigger cleanup
       summary.observe(20);
@@ -259,12 +260,12 @@ describe('Sliding Window Summary Metrics', () => {
 
       // Add values then advance time to expire them
       const now = Date.now();
-      jest.spyOn(Date, 'now').mockReturnValue(now);
+      vi.spyOn(Date, 'now').mockReturnValue(now);
 
       summary.observe(10, { temp: 'value' });
 
       // Advance beyond window
-      jest.spyOn(Date, 'now').mockReturnValue(now + 70000);
+      vi.spyOn(Date, 'now').mockReturnValue(now + 70000);
 
       summary.observe(20); // This should trigger cleanup
 

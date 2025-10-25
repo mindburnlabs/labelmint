@@ -118,7 +118,7 @@ export class ValidationService {
   /**
    * Create a Zod schema from validation rules
    */
-  static createZodSchema(rules: ValidationRule[]): z.ZodObject {
+  static createZodSchema(rules: ValidationRule[]): z.ZodObject<Record<string, z.ZodSchema>> {
     const schemaShape: Record<string, z.ZodSchema> = {};
 
     for (const rule of rules) {
@@ -198,8 +198,8 @@ export class ValidationService {
   /**
    * Validate enum values
    */
-  static enum<T extends readonly string[]>(values: T): z.ZodEnum<T> {
-    return z.enum(values);
+  static enum<T extends readonly string[]>(values: T): z.ZodEnum<[string, ...string[]]> {
+    return z.enum(values as [string, ...string[]]);
   }
 
   /**
@@ -226,7 +226,7 @@ export class ValidationService {
     condition: (data: any) => boolean,
     trueSchema: z.ZodType<T>,
     falseSchema: z.ZodType<T>
-  ): z.ZodEffects<z.ZodAny, T, T> {
+  ): z.ZodType<T> {
     return z.custom<T>((data) => {
       return condition(data) ? trueSchema.safeParse(data).success : falseSchema.safeParse(data).success;
     });

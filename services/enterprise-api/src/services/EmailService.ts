@@ -2,7 +2,7 @@ import { prisma } from '../app.js'
 import { logger } from '../utils/logger.js'
 import { AuditService } from './AuditService.js'
 import * as nodemailer from 'nodemailer'
-import sgTransport from 'nodemailer-sendgrid-transport'
+import * as sendGridMail from '@sendgrid/mail'
 import { SES } from '@aws-sdk/client-ses'
 import * as handlebars from 'handlebars'
 import * as fs from 'fs/promises'
@@ -130,11 +130,17 @@ export class EmailService {
 
       switch (config.provider) {
         case 'sendgrid':
-          transporter = nodemailer.createTransporter(
-            sgTransport({
-              apiKey: config.config.apiKey!
-            })
-          )
+          sendGridMail.setApiKey(config.config.apiKey!)
+          // Use SendGrid directly instead of through nodemailer
+          transporter = nodemailer.createTransporter({
+            host: 'smtp.sendgrid.net',
+            port: 587,
+            secure: false,
+            auth: {
+              user: 'apikey',
+              pass: config.config.apiKey!
+            }
+          })
           break
 
         case 'ses':
@@ -666,7 +672,7 @@ export class EmailService {
       })
 
       // Implement sophisticated bounce handling
-      await this.handleBounceProcessing(email, bounceType, bounceSubType, organizationId)
+      await this.handleBounceProcessing(email, bounceType, bounceSubType)
     } catch (error) {
       logger.error('Failed to handle email bounce', {
         email,

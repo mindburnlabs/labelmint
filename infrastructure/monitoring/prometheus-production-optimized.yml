@@ -1,0 +1,501 @@
+# Production-Optimized Prometheus Configuration for LabelMint
+# ==========================================================
+# Enhanced with comprehensive monitoring, advanced alerting, and business metrics
+# ==========================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'labelmint-production'
+    environment: 'production'
+    datacenter: 'us-east-1'
+    replica: 'prometheus-1'
+    region: 'us-east-1'
+
+# Alertmanager configuration with redundancy
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager-0.alertmanager:9093
+          - alertmanager-1.alertmanager:9093
+      timeout: 10s
+      api_version: v2
+    - static_configs:
+        - targets:
+          - alertmanager-backup:9093
+      timeout: 10s
+      api_version: v2
+
+# Rule files for comprehensive alerting
+rule_files:
+  - "alerts/business-metrics.yml"
+  - "alerts/application-performance.yml"
+  - "alerts/infrastructure-health.yml"
+  - "alerts/security-monitoring.yml"
+  - "alerts/cost-optimization.yml"
+  - "alerts/user-experience.yml"
+  - "alerts/blockchain-monitoring.yml"
+  - "alerts/payment-processing.yml"
+
+# Remote write for long-term storage and analytics
+remote_write:
+  - url: "https://prometheus-remote-storage.labelmint.it/api/v1/write"
+    queue_config:
+      max_samples_per_send: 2000
+      max_shards: 200
+      capacity: 5000
+      min_backoff: 30ms
+      max_backoff: 100ms
+    metadata_config:
+      send: true
+      send_interval: 30s
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'go_.*|process_.*|prometheus_.*'
+        action: drop
+      - source_labels: [__name__]
+        regex: 'node_.*'
+        action: drop
+    headers:
+      Authorization: "Bearer ${PROMETHEUS_REMOTE_WRITE_TOKEN}"
+    sigv4:
+      region: us-east-1
+      access_key: ${AWS_ACCESS_KEY_ID}
+      secret_key: ${AWS_SECRET_ACCESS_KEY}
+
+# Remote read for historical data
+remote_read:
+  - url: "https://prometheus-remote-storage.labelmint.it/api/v1/read"
+    read_recent: true
+    headers:
+      Authorization: "Bearer ${PROMETHEUS_REMOTE_READ_TOKEN}"
+
+# Enhanced scraping configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus-self'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prometheus-primary'
+
+  # LabelMint Web Application
+  - job_name: 'labelmint-web'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - production
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: replace
+        target_label: app
+      - source_labels: [__meta_kubernetes_pod_label_component]
+        action: replace
+        target_label: component
+    scrape_interval: 30s
+    scrape_timeout: 25s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'http_requests_total'
+        target_label: __tmp_requests
+      - source_labels: [__name__]
+        regex: 'http_request_duration_seconds'
+        target_label: __tmp_duration
+
+  # LabelMint Backend Services
+  - job_name: 'labelmint-backend'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - production
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Business Metrics Exporter
+  - job_name: 'business-metrics'
+    static_configs:
+      - targets: ['business-metrics-exporter:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    honor_labels: true
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'business-metrics'
+
+  # Database Performance Metrics
+  - job_name: 'postgresql-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+    metric_relabel_configs:
+      - source_labels: [datname]
+        regex: '^(postgres|template.*)'
+        action: drop
+      - source_labels: [__name__]
+        regex: 'pg_stat_activity_.*'
+        action: keep
+
+  # Redis Performance Metrics
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'redis_.*'
+        action: keep
+
+  # Kubernetes Node Exporter
+  - job_name: 'node-exporter'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: 'node-exporter'
+      - source_labels: [__meta_kubernetes_endpoint_node_name]
+        action: replace
+        target_label: instance
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Container Metrics (cAdvisor)
+  - job_name: 'cadvisor'
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_label_kubernetes_io_hostname]
+        action: replace
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '(.*):10250'
+        target_label: __address__
+        replacement: '${1}:8080'
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # TON Blockchain Metrics
+  - job_name: 'ton-blockchain'
+    static_configs:
+      - targets: ['ton-metrics-exporter:8080']
+    scrape_interval: 60s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'ton-blockchain-node'
+
+  # Payment Processing Metrics
+  - job_name: 'payment-metrics'
+    static_configs:
+      - targets: ['payment-metrics-exporter:8081']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'payment-processor'
+
+  # User Experience Metrics
+  - job_name: 'user-metrics'
+    static_configs:
+      - targets: ['user-metrics-collector:8082']
+    scrape_interval: 60s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'user-experience'
+
+  # Security Monitoring
+  - job_name: 'security-metrics'
+    static_configs:
+      - targets: ['security-exporter:8083']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'security-monitoring'
+
+  # External Service Monitoring (Blackbox)
+  - job_name: 'blackbox-external'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://labelmint.it
+        - https://api.labelmint.it
+        - https://app.labelmint.it
+        - https://toncenter.com/api/v2/getAddressInformation
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # SSL Certificate Monitoring
+  - job_name: 'ssl-certificate-monitoring'
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+        - labelmint.it:443
+        - api.labelmint.it:443
+        - app.labelmint.it:443
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # DNS Monitoring
+  - job_name: 'dns-monitoring'
+    metrics_path: /probe
+    params:
+      module: [dns_udp]
+    static_configs:
+      - targets:
+        - labelmint.it
+        - api.labelmint.it
+        - toncenter.com
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Kubernetes API Server
+  - job_name: 'kubernetes-apiservers'
+    kubernetes_sd_configs:
+      - role: endpoints
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+    scrape_interval: 30s
+    scrape_timeout: 25s
+
+  # Kubernetes State Metrics
+  - job_name: 'kube-state-metrics'
+    kubernetes_sd_configs:
+      - role: endpoints
+        namespaces:
+          names:
+          - monitoring
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_label_k8s_app]
+        action: keep
+        regex: kube-state-metrics
+    scrape_interval: 30s
+    scrape_timeout: 25s
+
+  # Kubernetes HPA Metrics
+  - job_name: 'kubernetes-hpa'
+    kubernetes_sd_configs:
+      - role: endpoints
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_service_name]
+        action: keep
+        regex: 'heapster'
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+
+  # Application Log Metrics (Loki)
+  - job_name: 'loki-metrics'
+    static_configs:
+      - targets: ['loki:3100']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'loki-log-aggregator'
+
+# Recording rules for performance optimization
+recording_rules:
+  - name: business-metrics.rules
+    interval: 30s
+    rules:
+      # Active users
+      - record: labelmint:active_users:rate_5m
+        expr: rate(labelmint_user_sessions_active_total[5m])
+
+      # Task completion rate
+      - record: labelmint:task_completion_rate:5m
+        expr: |
+          (
+            sum(rate(labelmint_tasks_completed_total[5m])) /
+            sum(rate(labelmint_tasks_started_total[5m]))
+          ) * 100
+
+      # Payment success rate
+      - record: labelmint:payment_success_rate:5m
+        expr: |
+          (
+            sum(rate(labelmint_payments_successful_total[5m])) /
+            sum(rate(labelmint_payments_initiated_total[5m]))
+          ) * 100
+
+      # Average response time
+      - record: labelmint:avg_response_time:5m
+        expr: |
+          (
+            sum(rate(http_request_duration_seconds_sum[5m])) /
+            sum(rate(http_request_duration_seconds_count[5m]))
+          ) * 1000
+
+      # Error rate
+      - record: labelmint:error_rate:5m
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) /
+            sum(rate(http_requests_total[5m]))
+          ) * 100
+
+  - name: infrastructure-metrics.rules
+    interval: 60s
+    rules:
+      # CPU usage
+      - record: labelmint:cpu_usage:percent
+        expr: |
+          (
+            100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])))
+          )
+
+      # Memory usage
+      - record: labelmint:memory_usage:percent
+        expr: |
+          (
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+          )
+
+      # Disk usage
+      - record: labelmint:disk_usage:percent
+        expr: |
+          (
+            (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100
+          )
+
+# Alerting rules for proactive monitoring
+alerting_rules:
+  - name: critical-alerts.rules
+    interval: 30s
+    rules:
+      # Service is down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: labelmint:error_rate:5m > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }}% for the last 5 minutes."
+
+# Additional configuration for performance tuning
+storage:
+  tsdb:
+    path: /prometheus
+    retention.time: 15d
+    retention.size: 50GB
+    wal-compression: true
+
+# Query configuration for performance
+query:
+  max_samples: 50000000
+  timeout: 2m
+  max_concurrent_queries: 20
+
+# Web configuration
+web:
+  page_title: "LabelMint Prometheus"
+  enable_admin_api: false
+  cors:
+    origins: ['https://grafana.labelmint.it']
+    methods: ['GET', 'POST']

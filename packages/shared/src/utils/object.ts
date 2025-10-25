@@ -47,7 +47,7 @@ export function cloneDeep<T>(obj: T): T {
   if (typeof obj === 'object') {
     const cloned = {} as T;
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
+      if (objObject.prototype.hasOwnProperty.call(key)) {
         cloned[key] = cloneDeep(obj[key]);
       }
     }
@@ -67,7 +67,7 @@ export function clone<T>(obj: T): T {
  * Merge objects (shallow)
  */
 export function merge<T extends Record<string, any>>(...objects: Partial<T>[]): T {
-  return objects.reduce((result, obj) => ({ ...result, ...obj }), {} as T);
+  return objects.reduce((result, obj) => ({ ...result, ...obj }), {} as Partial<T>) as T;
 }
 
 /**
@@ -190,7 +190,7 @@ export function mapKeys<T extends Record<string, any>, U extends string>(
 ): Record<U, T[keyof T]> {
   const result = {} as Record<U, T[keyof T]>;
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
+    if (objObject.prototype.hasOwnProperty.call(key)) {
       const newKey = mapFn(key, obj[key]);
       result[newKey] = obj[key];
     }
@@ -207,7 +207,7 @@ export function mapValues<T extends Record<string, any>, U>(
 ): Record<keyof T, U> {
   const result = {} as Record<keyof T, U>;
   for (const key in obj) {
-    if (obj.hasOwnProperty(key)) {
+    if (objObject.prototype.hasOwnProperty.call(key)) {
       result[key] = mapFn(obj[key], key);
     }
   }
@@ -223,7 +223,7 @@ export function filter<T extends Record<string, any>>(
 ): Partial<T> {
   const result = {} as Partial<T>;
   for (const key in obj) {
-    if (obj.hasOwnProperty(key) && predicate(obj[key], key)) {
+    if (objObject.prototype.hasOwnProperty.call(key) && predicate(obj[key], key)) {
       result[key] = obj[key];
     }
   }
@@ -238,7 +238,7 @@ export function find<T extends Record<string, any>>(
   predicate: (value: T[keyof T], key: keyof T) => boolean
 ): { key: keyof T; value: T[keyof T] } | undefined {
   for (const key in obj) {
-    if (obj.hasOwnProperty(key) && predicate(obj[key], key)) {
+    if (objObject.prototype.hasOwnProperty.call(key) && predicate(obj[key], key)) {
       return { key, value: obj[key] };
     }
   }
@@ -253,7 +253,7 @@ export function every<T extends Record<string, any>>(
   predicate: (value: T[keyof T], key: keyof T) => boolean
 ): boolean {
   for (const key in obj) {
-    if (obj.hasOwnProperty(key) && !predicate(obj[key], key)) {
+    if (objObject.prototype.hasOwnProperty.call(key) && !predicate(obj[key], key)) {
       return false;
     }
   }
@@ -268,7 +268,7 @@ export function some<T extends Record<string, any>>(
   predicate: (value: T[keyof T], key: keyof T) => boolean
 ): boolean {
   for (const key in obj) {
-    if (obj.hasOwnProperty(key) && predicate(obj[key], key)) {
+    if (objObject.prototype.hasOwnProperty.call(key) && predicate(obj[key], key)) {
       return true;
     }
   }
@@ -294,7 +294,7 @@ export function deepFreeze<T>(obj: T): T {
 export function toQueryString(obj: Record<string, any>): string {
   const params = new URLSearchParams();
   for (const key in obj) {
-    if (obj.hasOwnProperty(key) && obj[key] !== undefined && obj[key] !== null) {
+    if (objObject.prototype.hasOwnProperty.call(key) && obj[key] !== undefined && obj[key] !== null) {
       params.append(key, String(obj[key]));
     }
   }

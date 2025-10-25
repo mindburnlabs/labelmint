@@ -3,8 +3,8 @@
   "projects": [
     {
       "name": "PaymentProcessor",
-      "path": "./contracts/PaymentProcessor.tact",
-      "output": "./contracts/output",
+      "path": "./PaymentProcessor.tact",
+      "output": "./output",
       "options": {
         "debug": true,
         "external": true,

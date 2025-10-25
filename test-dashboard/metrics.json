@@ -1,0 +1,55 @@
+{
+  "timestamp": "2025-10-25T11:40:05.362Z",
+  "metrics": {
+    "unitTests": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "coverage": {
+        "lines": 0,
+        "functions": 0,
+        "branches": 0,
+        "statements": 0
+      }
+    },
+    "integrationTests": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "e2eTests": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "securityTests": {
+      "vulnerabilities": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
+    "performanceTests": {
+      "averageResponseTime": 0,
+      "p95ResponseTime": 0,
+      "requestsPerSecond": 0,
+      "errorRate": 0
+    },
+    "codeQuality": {
+      "eslintErrors": 0,
+      "eslintWarnings": 0,
+      "typeErrors": 0,
+      "duplicateLines": 0,
+      "maintainabilityIndex": 0
+    }
+  },
+  "summary": {
+    "totalTests": 0,
+    "passedTests": 0,
+    "failedTests": 0,
+    "overallCoverage": 0,
+    "securityIssues": 0,
+    "qualityScore": 30
+  }
+}

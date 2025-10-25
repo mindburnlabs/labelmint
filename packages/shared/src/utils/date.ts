@@ -137,8 +137,8 @@ export function startOfWeek(date: Date, startOfWeek: number = 0): Date {
 /**
  * Get end of week
  */
-export function endOfWeek(date: Date, startOfWeek: number = 0): Date {
-  const result = startOfWeek(date, startOfWeek);
+export function endOfWeek(date: Date, startOfWeekDay: number = 0): Date {
+  const result = startOfWeek(date, startOfWeekDay);
   result.setDate(result.getDate() + 6);
   return endOfDay(result);
 }

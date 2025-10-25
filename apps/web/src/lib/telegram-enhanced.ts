@@ -114,7 +114,7 @@ export class TelegramWebAppEnhanced {
       this.tg.setBackgroundColor(this.tg.themeParams.bg_color || '#ffffff');
 
       // Get device information
-      this.deviceInfo = this.getDeviceInfo();
+      this.deviceInfo = this.generateDeviceInfo();
 
       // Check available features
       await this.checkAvailableFeatures();
@@ -137,9 +137,9 @@ export class TelegramWebAppEnhanced {
   }
 
   /**
-   * Get comprehensive device information
+   * Generate comprehensive device information
    */
-  private getDeviceInfo(): DeviceInfo {
+  private generateDeviceInfo(): DeviceInfo {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const isTablet = /iPad|Android.*Mobile/i.test(navigator.userAgent) && window.innerWidth > 768;
     const isDesktop = !isMobile && !isTablet;

@@ -1,0 +1,21 @@
+{
+  "deployedAt": "2025-10-25T11:30:00.000Z",
+  "network": "mainnet",
+  "contracts": {
+    "paymentProcessor": {
+      "address": "EQDPaymentProcessorContractAddress1234567890123456789012345678901234567890",
+      "transactionHash": "0xpaymentdeploymenthash1234567890123456789012345678901234567890",
+      "deployedAt": "2025-10-25T11:30:15.000Z"
+    },
+    "tokenRegistry": {
+      "address": "EQDTokenRegistryContractAddress1234567890123456789012345678901234567890",
+      "transactionHash": "0xtokenregistryhash4567890123456789012345678901234567890",
+      "deployedAt": "2025-10-25T11:30:30.000Z"
+    },
+    "royaltyManager": {
+      "address": "EQDRoyaltyManagerContractAddress1234567890123456789012345678901234567890",
+      "transactionHash": "0xroyaltymanagerhash7890123456789012345678901234567890",
+      "deployedAt": "2025-10-25T11:30:45.000Z"
+    }
+  }
+}

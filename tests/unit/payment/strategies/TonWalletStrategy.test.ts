@@ -1,28 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TonWalletStrategy } from '@payment/strategies/TonWalletStrategy';
-import { TonClient, WalletContractV4, internal } from '@ton/ton';
-import { createMockTonWallet } from '@test/utils/mocks';
-import type { Transaction, PaymentResult } from '@payment/types';
+import { TonWalletStrategy } from '../../../../../services/payment-backend/src/services/payment/strategies/TonWalletStrategy';
+import { TonClient, WalletContractV4, internal, Address, fromNano, toNano } from '@ton/ton';
+import type { Transaction } from '../../../services/payment-backend/src/services/payment/interfaces/PaymentStrategy';
+import { createMockTonClient, createMockPaymentConfig } from '../../test-utils/mocks/tonWallet.mock';
 
 describe('TonWalletStrategy', () => {
   let strategy: TonWalletStrategy;
   let mockTonClient: any;
-  let mockWallet: any;
 
-  beforeEach(() => {
-    mockWallet = createMockTonWallet();
-    mockTonClient = {
-      open: vi.fn(() => mockWallet),
-    };
+  beforeEach(async () => {
+    mockTonClient = createMockTonClient();
 
-    strategy = new TonWalletStrategy({
-      tonClient: mockTonClient,
-      config: {
-        workchain: 0,
-        timeout: 30000,
-        gasLimit: 1000000,
-      },
-    });
+    strategy = new TonWalletStrategy(createMockPaymentConfig());
+    await strategy.initialize(); // Initialize the strategy
   });
 
   describe('Deposit', () => {

@@ -18,8 +18,6 @@ export default defineConfig({
       'coverage',
       '**/*.d.ts',
       '**/*.config.{js,ts}',
-      '**/test/**',
-      '**/tests/**',
       '**/unit/**',
       '**/integration/**',
       '**/e2e/**',

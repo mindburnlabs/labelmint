@@ -103,26 +103,53 @@ export class TonWalletStrategy implements PaymentStrategy {
    * Withdraw TON to external address
    */
   async withdraw(amount: number, address: string, options?: TransferOptions): Promise<Transaction> {
-    if (!this.validateAddress(address)) {
-      throw new Error('Invalid TON address');
+    try {
+      // Validate input parameters
+      if (!amount || amount <= 0) {
+        throw new Error(`Invalid withdrawal amount: ${amount}. Amount must be greater than 0.`);
+      }
+
+      if (!address || !this.validateAddress(address)) {
+        throw new Error(`Invalid TON address: ${address}`);
+      }
+
+      // Validate amount limits
+      if (amount > 1000000) { // 1 million TON limit
+        throw new Error(`Withdrawal amount ${amount} TON exceeds maximum limit of 1,000,000 TON`);
+      }
+
+      // Get wallet info
+      const wallet = await this.getUserWallet(address);
+      if (!wallet) {
+        throw new Error(`Sender wallet not found for address: ${address}`);
+      }
+
+      // Check if wallet is active
+      if (!wallet.is_active) {
+        throw new Error(`Wallet ${address} is not active. Please contact support.`);
+      }
+
+      // Create and send transaction
+      const transaction = await this.sendTransaction({
+        fromAddress: wallet.wallet_address,
+        toAddress: address,
+        amount: toNano(amount).toString(),
+        tokenType: 'TON',
+        message: options?.message
+      });
+
+      return transaction;
+    } catch (error) {
+      logger.error('TON withdrawal failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        amount,
+        address,
+        options
+      });
+
+      // Re-throw with more context
+      throw new Error(`TON withdrawal failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // Get wallet info
-    const wallet = await this.getUserWallet(address);
-    if (!wallet) {
-      throw new Error('Wallet not found');
-    }
-
-    // Create and send transaction
-    const transaction = await this.sendTransaction({
-      fromAddress: wallet.wallet_address,
-      toAddress: address,
-      amount: toNano(amount).toString(),
-      tokenType: 'TON',
-      message: options?.message
-    });
-
-    return transaction;
   }
 
   /**
@@ -285,78 +312,163 @@ export class TonWalletStrategy implements PaymentStrategy {
   }): Promise<Transaction> {
     const { fromAddress, toAddress, amount, message } = params;
 
-    // Get wallet info for sending
-    const wallet = await this.getUserWallet(fromAddress);
-    if (!wallet) {
-      throw new Error(`Sender wallet not found: ${fromAddress}`);
+    try {
+      // Validate transaction parameters
+      if (!fromAddress || !toAddress || fromAddress === toAddress) {
+        throw new Error(`Invalid transaction addresses: from=${fromAddress}, to=${toAddress}`);
+      }
+
+      if (!amount || BigInt(amount) <= 0) {
+        throw new Error(`Invalid transaction amount: ${amount}`);
+      }
+
+      // Get wallet info for sending
+      const wallet = await this.getUserWallet(fromAddress);
+      if (!wallet) {
+        throw new Error(`Sender wallet not found: ${fromAddress}`);
+      }
+
+      // Check if wallet is frozen or blocked
+      if (wallet.frozen_balance && wallet.frozen_balance > 0) {
+        logger.warn(`Wallet ${fromAddress} has frozen balance: ${wallet.frozen_balance} TON`);
+      }
+
+      // Decrypt mnemonic to get wallet keys
+      let mnemonic: string[];
+      try {
+        mnemonic = this.decryptMnemonic(wallet.mnemonic_encrypted);
+      } catch (decryptError) {
+        throw new Error(`Failed to decrypt wallet mnemonic: ${decryptError instanceof Error ? decryptError.message : 'Unknown error'}`);
+      }
+
+      let keyPair;
+      try {
+        keyPair = await mnemonicToPrivateKey(mnemonic);
+      } catch (keyError) {
+        throw new Error(`Failed to derive wallet keys from mnemonic: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`);
+      }
+
+      // Create wallet contract
+      const workchain = 0;
+      let walletContract;
+
+      try {
+        if (wallet.wallet_version === 'v4R2') {
+          walletContract = WalletContractV4.create({ workchain, publicKey: keyPair.publicKey });
+        } else {
+          walletContract = WalletContractV3R2.create({ workchain, publicKey: keyPair.publicKey });
+        }
+      } catch (contractError) {
+        throw new Error(`Failed to create wallet contract: ${contractError instanceof Error ? contractError.message : 'Unknown error'}`);
+      }
+
+      // Open wallet and check balance
+      let openedWallet, balance;
+      try {
+        openedWallet = this.tonClient.open(walletContract);
+        balance = await openedWallet.getBalance();
+      } catch (balanceError) {
+        throw new Error(`Failed to get wallet balance: ${balanceError instanceof Error ? balanceError.message : 'Unknown error'}`);
+      }
+
+      const transferAmount = BigInt(amount);
+      let estimatedFee;
+      try {
+        estimatedFee = await this.estimateRealGasFee(fromAddress, toAddress, amount);
+      } catch (feeError) {
+        logger.warn('Failed to estimate gas fee, using default:', feeError);
+        estimatedFee = toNano('0.01'); // Default 0.01 TON fee
+      }
+
+      if (balance < transferAmount + estimatedFee) {
+        const required = fromNano(transferAmount + estimatedFee);
+        const available = fromNano(balance);
+        throw new Error(`Insufficient balance. Required: ${required} TON, Available: ${available} TON, Fee: ${fromNano(estimatedFee)} TON`);
+      }
+
+      // Create transfer
+      let seqno, transfer;
+      try {
+        seqno = await openedWallet.getSeqno();
+        transfer = openedWallet.createTransfer({
+          seqno,
+          secretKey: keyPair.secretKey,
+          messages: [
+            internal({
+              to: Address.parse(toAddress),
+              value: transferAmount,
+              body: message ? beginCell().storeUint(0, 32).storeStringTail(message).endCell() : undefined,
+            })
+          ],
+        });
+      } catch (createError) {
+        throw new Error(`Failed to create transfer: ${createError instanceof Error ? createError.message : 'Unknown error'}`);
+      }
+
+      // Send transaction to blockchain with retry logic
+      let result;
+      try {
+        logger.info(`Sending TON transfer: ${fromAddress} -> ${toAddress}, amount: ${fromNano(transferAmount)} TON, seqno: ${seqno}`);
+
+        // Add timeout for blockchain interaction
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Transaction timeout')), 30000)
+        );
+
+        result = await Promise.race([
+          this.tonClient.external(transfer),
+          timeoutPromise
+        ]) as any;
+
+        if (!result) {
+          throw new Error('No transaction result returned');
+        }
+
+      } catch (sendError) {
+        throw new Error(`Failed to send transaction to blockchain: ${sendError instanceof Error ? sendError.message : 'Unknown error'}`);
+      }
+
+      // Create transaction record with real hash
+      const transaction: Transaction = {
+        hash: result.toString(), // Real transaction hash
+        fromAddress,
+        toAddress,
+        amount: fromNano(transferAmount),
+        tokenType: 'TON',
+        fee: fromNano(estimatedFee),
+        timestamp: new Date(),
+        status: 'pending',
+        message
+      };
+
+      // Record transaction in database with error handling
+      try {
+        await this.recordTransaction(transaction);
+      } catch (dbError) {
+        logger.error('Failed to record transaction:', dbError);
+        // Don't fail the transaction if database recording fails
+      }
+
+      // Update wallet balance in background with error handling
+      this.updateWalletBalance(wallet.user_id).catch(error => {
+        logger.error('Failed to update wallet balance:', error);
+      });
+
+      logger.info(`TON transfer sent successfully: ${transaction.hash}`);
+      return transaction;
+
+    } catch (error) {
+      logger.error('TON transaction failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        fromAddress,
+        toAddress,
+        amount,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+
+      // Re-throw with more context
+      throw new Error(`TON transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // Decrypt mnemonic to get wallet keys
-    const mnemonic = this.decryptMnemonic(wallet.mnemonic_encrypted);
-    const keyPair = await mnemonicToPrivateKey(mnemonic);
-
-    // Create wallet contract
-    const workchain = 0;
-    let walletContract;
-
-    if (wallet.wallet_version === 'v4R2') {
-      walletContract = WalletContractV4.create({ workchain, publicKey: keyPair.publicKey });
-    } else {
-      walletContract = WalletContractV3R2.create({ workchain, publicKey: keyPair.publicKey });
-    }
-
-    // Open wallet and check balance
-    const openedWallet = this.tonClient.open(walletContract);
-    const balance = await openedWallet.getBalance();
-
-    const transferAmount = BigInt(amount);
-    const estimatedFee = await this.estimateRealGasFee(fromAddress, toAddress, amount);
-
-    if (balance < transferAmount + estimatedFee) {
-      throw new Error(`Insufficient balance. Required: ${fromNano(transferAmount + estimatedFee)} TON, Available: ${fromNano(balance)} TON`);
-    }
-
-    // Create transfer
-    const seqno = await openedWallet.getSeqno();
-    const transfer = openedWallet.createTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      messages: [
-        internal({
-          to: Address.parse(toAddress),
-          value: transferAmount,
-          body: message ? beginCell().storeUint(0, 32).storeStringTail(message).endCell() : undefined,
-        })
-      ],
-    });
-
-    // Send transaction to blockchain
-    logger.info(`Sending TON transfer: ${fromAddress} -> ${toAddress}, amount: ${fromNano(transferAmount)} TON`);
-
-    const result = await this.tonClient.external(transfer);
-
-    // Create transaction record with real hash
-    const transaction: Transaction = {
-      hash: result.toString(), // Real transaction hash
-      fromAddress,
-      toAddress,
-      amount: fromNano(transferAmount),
-      tokenType: 'TON',
-      fee: fromNano(estimatedFee),
-      timestamp: new Date(),
-      status: 'pending',
-      message
-    };
-
-    // Record transaction in database
-    await this.recordTransaction(transaction);
-
-    // Update wallet balance in background
-    this.updateWalletBalance(wallet.user_id).catch(error => {
-      logger.error('Failed to update wallet balance:', error);
-    });
-
-    return transaction;
   }
 
   /**

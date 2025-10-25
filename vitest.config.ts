@@ -24,7 +24,8 @@ export default defineConfig({
       '**/*.d.ts',
       '**/*.config.{js,ts}',
       '**/test/**',
-      '**/tests/**'
+      '**/tests/**',
+      '**/node_modules/**'
     ],
     coverage: {
       provider: 'v8',

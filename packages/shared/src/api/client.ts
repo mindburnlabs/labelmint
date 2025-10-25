@@ -5,6 +5,13 @@
 import type { ApiResponse, ApiError } from '../types/api';
 import { AppError, createError } from '../utils/error';
 
+// Global types for XMLHttpRequest
+interface ProgressEventInit {
+  lengthComputable?: boolean;
+  loaded?: number;
+  total?: number;
+}
+
 export interface ApiClientConfig {
   baseURL: string;
   timeout: number;
@@ -162,7 +169,7 @@ export class ApiClient {
             message: (errorData as any)?.message || `HTTP ${response.status}: ${response.statusText}`,
             details: (errorData as any)?.details,
             timestamp: new Date(),
-            stack: new Error().stack
+            stack: new Error().stack || undefined as string | undefined
           };
           throw createError(error.message);
         }
@@ -271,12 +278,12 @@ export class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
-    const xhr = new (globalThis.XMLHttpRequest || ({} as any))();
+    const xhr = new (globalThis as any).XMLHttpRequest;
 
     return new Promise((resolve, reject) => {
       // Handle progress
       if (options.onProgress) {
-        xhr.upload.addEventListener('progress', (event: ProgressEvent) => {
+        xhr.upload.addEventListener('progress', (event: any) => {
           if (event.lengthComputable) {
             const progress = (event.loaded / event.total) * 100;
             options.onProgress!(progress);

@@ -1,0 +1,494 @@
+# Infrastructure Health Monitoring and Alerting Rules for LabelMint
+# ===============================================================
+
+groups:
+  - name: kubernetes-cluster-health
+    interval: 30s
+    rules:
+      # Kubernetes API Server Health
+      - alert: KubernetesAPIServerDown
+        expr: |
+          (
+            up{job="kubernetes-apiservers"} == 0
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: devops
+          service: kubernetes-api
+        annotations:
+          summary: "Kubernetes API server is down"
+          description: "Kubernetes API server {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/api-server-down"
+
+      - alert: KubernetesAPIServerHighLatency
+        expr: |
+          (
+            histogram_quantile(0.99,
+              sum(rate(apiserver_request_latencies_seconds_bucket[5m])) by (le, verb)
+            ) > 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-api
+        annotations:
+          summary: "Kubernetes API server high latency"
+          description: "99th percentile API server latency is {{ $value }}s for {{ $labels.verb }} requests"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/api-latency"
+
+      # Node Health Monitoring
+      - alert: KubernetesNodeReady
+        expr: |
+          (
+            kube_node_status_condition{condition="Ready",status="true"} == 0
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: devops
+          service: kubernetes-nodes
+        annotations:
+          summary: "Kubernetes node {{ $labels.node }} is not ready"
+          description: "Node {{ $labels.node }} has been not ready for more than 5 minutes"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/node-not-ready"
+
+      - alert: KubernetesNodeMemoryPressure
+        expr: |
+          (
+            kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-nodes
+        annotations:
+          summary: "Kubernetes node {{ $labels.node }} has memory pressure"
+          description: "Node {{ $labels.node }} is experiencing memory pressure"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/node-memory-pressure"
+
+      - alert: KubernetesNodeDiskPressure
+        expr: |
+          (
+            kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-nodes
+        annotations:
+          summary: "Kubernetes node {{ $labels.node }} has disk pressure"
+          description: "Node {{ $labels.node }} is experiencing disk pressure"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/node-disk-pressure"
+
+      # Pod Health Monitoring
+      - alert: KubernetesPodCrashLooping
+        expr: |
+          (
+            rate(kube_pod_container_status_restarts_total[15m]) > 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-pods
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/pod-crash-loop"
+
+      - alert: KubernetesPodNotReady
+        expr: |
+          (
+            kube_pod_status_ready{condition="true"} == 0
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-pods
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is not ready"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been not ready for more than 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/pod-not-ready"
+
+      - alert: KubernetesPodImagePullBackOff
+        expr: |
+          (
+            kube_pod_container_status_waiting_reason{reason="ImagePullBackOff"} == 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-pods
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has image pull back-off"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} cannot pull container image"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/image-pull-backoff"
+
+      # Deployment Health
+      - alert: KubernetesDeploymentReplicasMismatch
+        expr: |
+          (
+            kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-deployments
+        annotations:
+          summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} replica mismatch"
+          description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} unavailable replicas"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/replica-mismatch"
+
+      - alert: KubernetesDeploymentRolloutStuck
+        expr: |
+          (
+            kube_deployment_status_condition{condition="Progressing",status="false"} == 1
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: devops
+          service: kubernetes-deployments
+        annotations:
+          summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} rollout is stuck"
+          description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} rollout has been stuck for more than 15 minutes"
+          runbook_url: "https://runbooks.labelmint.it/kubernetes/rollout-stuck"
+
+  - name: container-resource-monitoring
+    interval: 60s
+    rules:
+      # Container CPU Usage
+      - alert: ContainerHighCPUUsage
+        expr: |
+          (
+            sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (pod, name) /
+            sum(container_spec_cpu_quota{name!=""}/container_spec_cpu_period{name!=""}) by (pod, name) * 100 > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: container-resources
+        annotations:
+          summary: "Container {{ $labels.name }} in pod {{ $labels.pod }} high CPU usage"
+          description: "Container CPU usage is {{ $value }}%. Consider increasing CPU limits"
+          runbook_url: "https://runbooks.labelmint.it/containers/high-cpu"
+
+      - alert: ContainerCriticalCPUUsage
+        expr: |
+          (
+            sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (pod, name) /
+            sum(container_spec_cpu_quota{name!=""}/container_spec_cpu_period{name!=""}) by (pod, name) * 100 > 95
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: devops
+          service: container-resources
+        annotations:
+          summary: "Container {{ $labels.name }} in pod {{ $labels.pod }} critical CPU usage"
+          description: "Container CPU usage is {{ $value }}%. Container may be throttled"
+          runbook_url: "https://runbooks.labelmint.it/containers/critical-cpu"
+
+      # Container Memory Usage
+      - alert: ContainerHighMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""} * 100 > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: container-resources
+        annotations:
+          summary: "Container {{ $labels.name }} in pod {{ $labels.pod }} high memory usage"
+          description: "Container memory usage is {{ $value }}%. Monitor for potential memory leaks"
+          runbook_url: "https://runbooks.labelmint.it/containers/high-memory"
+
+      - alert: ContainerCriticalMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""} * 100 > 95
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: devops
+          service: container-resources
+        annotations:
+          summary: "Container {{ $labels.name }} in pod {{ $labels.pod }} critical memory usage"
+          description: "Container memory usage is {{ $value }}%. Risk of OOM kill"
+          runbook_url: "https://runbooks.labelmint.it/containers/critical-memory"
+
+      # Container OOM Kills
+      - alert: ContainerOOMKilled
+        expr: |
+          (
+            increase(container_oom_events_total{name!=""}[5m]) > 0
+          )
+        for: 0s
+        labels:
+          severity: warning
+          team: devops
+          service: container-resources
+        annotations:
+          summary: "Container {{ $labels.name }} in pod {{ $labels.pod }} was OOM killed"
+          description: "Container was killed due to out of memory conditions"
+          runbook_url: "https://runbooks.labelmint.it/containers/oom-kill"
+
+  - name: network-monitoring
+    interval: 60s
+    rules:
+      # Network Interface Errors
+      - alert: NetworkInterfaceHighErrorRate
+        expr: |
+          (
+            rate(node_network_receive_errs_total[5m]) + rate(node_network_transmit_errs_total[5m]) > 10
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: network
+        annotations:
+          summary: "Network interface {{ $labels.device }} high error rate"
+          description: "Network interface error rate is {{ $value }} errors/sec"
+          runbook_url: "https://runbooks.labelmint.it/network/interface-errors"
+
+      # Network Interface Drops
+      - alert: NetworkInterfaceHighDropRate
+        expr: |
+          (
+            rate(node_network_receive_drop_total[5m]) + rate(node_network_transmit_drop_total[5m]) > 10
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: network
+        annotations:
+          summary: "Network interface {{ $labels.device }} high drop rate"
+          description: "Network interface drop rate is {{ $value }} packets/sec"
+          runbook_url: "https://runbooks.labelmint.it/network/interface-drops"
+
+      # Connection Tracking
+      - alert: HighConnectionTrackingUsage
+        expr: |
+          (
+            node_nf_conntrack_entries / node_nf_conntrack_limit * 100 > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: network
+        annotations:
+          summary: "High connection tracking table usage"
+          description: "Connection tracking table is {{ $value }}% full"
+          runbook_url: "https://runbooks.labelmint.it/network/conntrack-usage"
+
+  - name: storage-monitoring
+    interval: 300s
+    rules:
+      # Disk Usage
+      - alert: DiskSpaceLow
+        expr: |
+          (
+            (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) * 100 < 20
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: devops
+          service: storage
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "Disk space is {{ $value }}% full"
+          runbook_url: "https://runbooks.labelmint.it/storage/low-disk-space"
+
+      - alert: DiskSpaceCritical
+        expr: |
+          (
+            (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"}) * 100 < 10
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: devops
+          service: storage
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}:{{ $labels.mountpoint }}"
+          description: "Disk space is {{ $value }}% full. Immediate cleanup required!"
+          runbook_url: "https://runbooks.labelmint.it/storage/critical-disk-space"
+
+      # Disk I/O Wait
+      - alert: DiskIOWaitHigh
+        expr: |
+          (
+            rate(node_disk_io_time_seconds_total[5m]) * 100 > 20
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: storage
+        annotations:
+          summary: "High disk I/O wait on {{ $labels.instance }}:{{ $labels.device }}"
+          description: "Disk I/O wait is {{ $value }}%"
+          runbook_url: "https://runbooks.labelmint.it/storage/high-io-wait"
+
+      # Disk Throughput
+      - alert: DiskThroughputLow
+        expr: |
+          (
+            rate(node_disk_bytes_read_total[5m]) + rate(node_disk_bytes_written_total[5m]) < 1048576
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: devops
+          service: storage
+        annotations:
+          summary: "Low disk throughput on {{ $labels.instance }}:{{ $labels.device }}"
+          description: "Disk throughput is {{ $value | humanize1024 }}/s. May indicate performance issues"
+          runbook_url: "https://runbooks.labelmint.it/storage/low-throughput"
+
+  - name: load-balancer-monitoring
+    interval: 60s
+    rules:
+      # Load Balancer Health
+      - alert: LoadBalancerUnhealthyHosts
+        expr: |
+          (
+            aws_alb_healthy_host_count < 1
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: devops
+          service: load-balancer
+        annotations:
+          summary: "Load balancer {{ $labels.load_balancer }} has no healthy hosts"
+          description: "All backend hosts are unhealthy"
+          runbook_url: "https://runbooks.labelmint.it/load-balancer/unhealthy-hosts"
+
+      - alert: LoadBalancerHigh5XXRate
+        expr: |
+          (
+            rate(aws_alb_httpcode_target_5_xx_count[5m]) / rate(aws_alb_request_count[5m]) * 100 > 5
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: devops
+          service: load-balancer
+        annotations:
+          summary: "Load balancer {{ $labels.load_balancer }} high 5XX error rate"
+          description: "5XX error rate is {{ $value }}%"
+          runbook_url: "https://runbooks.labelmint.it/load-balancer/high-5xx"
+
+      - alert: LoadBalancerHighLatency
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(aws_alb_target_response_time_seconds_bucket[5m])) by (le)
+            ) > 2
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: load-balancer
+        annotations:
+          summary: "Load balancer {{ $labels.load_balancer }} high latency"
+          description: "95th percentile response time is {{ $value }}s"
+          runbook_url: "https://runbooks.labelmint.it/load-balancer/high-latency"
+
+  - name: aws-resource-monitoring
+    interval: 300s
+    rules:
+      # EBS Volume Monitoring
+      - alert: EBSVolumeHighLatency
+        expr: |
+          (
+            aws_ebs_volume_total_read_time_seconds / aws_ebs_volume_read_ops > 0.01
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: aws-ebs
+        annotations:
+          summary: "EBS volume {{ $labels.volume_id }} high latency"
+          description: "EBS volume read latency is {{ $value }}s"
+          runbook_url: "https://runbooks.labelmint.it/aws/ebs-high-latency"
+
+      # RDS Monitoring
+      - alert: RDSHighCPUUtilization
+        expr: |
+          (
+            aws_rds_cpuutilization_average > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: aws-rds
+        annotations:
+          summary: "RDS instance {{ $labels.db_instance_identifier }} high CPU utilization"
+          description: "CPU utilization is {{ $value }}%"
+          runbook_url: "https://runbooks.labelmint.it/aws/rds-high-cpu"
+
+      - alert: RDSLowFreeStorageSpace
+        expr: |
+          (
+            aws_rds_free_storage_space_average < 10000000000
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: devops
+          service: aws-rds
+        annotations:
+          summary: "RDS instance {{ $labels.db_instance_identifier }} low free storage"
+          description: "Free storage space is {{ $value | humanize1024 }}"
+          runbook_url: "https://runbooks.labelmint.it/aws/rds-low-storage"
+
+      # ElastiCache Monitoring
+      - alert: ElastiCacheHighCPUUtilization
+        expr: |
+          (
+            aws_elasticache_cpuutilization_average > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: aws-elasticache
+        annotations:
+          summary: "ElastiCache node {{ $labels.cache_node_id }} high CPU utilization"
+          description: "CPU utilization is {{ $value }}%"
+          runbook_url: "https://runbooks.labelmint.it/aws/elasticache-high-cpu"
+
+      - alert: ElastiCacheLowFreeMemory
+        expr: |
+          (
+            aws_elasticache_freeable_memory_average < 100000000
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: devops
+          service: aws-elasticache
+        annotations:
+          summary: "ElastiCache node {{ $labels.cache_node_id }} low free memory"
+          description: "Free memory is {{ $value | humanize1024 }}"
+          runbook_url: "https://runbooks.labelmint.it/aws/elasticache-low-memory"

@@ -32,8 +32,7 @@ export default defineConfig({
   entry: getEntryPoints(),
   format: ['cjs', 'esm'],
   dts: {
-    resolve: true,
-    only: true
+    resolve: true
   },
   clean: true,
   external: [

@@ -1,0 +1,272 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabelMint Test Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .metric-card {
+            @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
+        }
+        .status-pass { @apply text-green-600 bg-green-50; }
+        .status-fail { @apply text-red-600 bg-red-50; }
+        .status-warning { @apply text-yellow-600 bg-yellow-50; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">LabelMint Test Dashboard</h1>
+            <p class="text-gray-600">Comprehensive testing metrics and quality assurance</p>
+            <p class="text-sm text-gray-500">Last updated: 10/25/2025, 2:40:05 PM</p>
+        </header>
+
+        <!-- Overview Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Unit Tests</h3>
+                <div class="text-3xl font-bold text-red-600">
+                    0%
+                </div>
+                <p class="text-sm text-gray-600">Coverage (0/0 passed)</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Integration Tests</h3>
+                <div class="text-3xl font-bold text-red-600">
+                    0
+                </div>
+                <p class="text-sm text-gray-600">Tests (0 passed)</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">E2E Tests</h3>
+                <div class="text-3xl font-bold text-red-600">
+                    0
+                </div>
+                <p class="text-sm text-gray-600">Tests (0 passed)</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Security Issues</h3>
+                <div class="text-3xl font-bold text-green-600">
+                    0
+                </div>
+                <p class="text-sm text-gray-600">Total vulnerabilities</p>
+            </div>
+        </section>
+
+        <!-- Coverage Charts -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Test Coverage</h3>
+                <canvas id="coverageChart" width="400" height="300"></canvas>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Test Results Distribution</h3>
+                <canvas id="testResultsChart" width="400" height="300"></canvas>
+            </div>
+        </section>
+
+        <!-- Performance Metrics -->
+        <section class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Avg Response Time</h3>
+                <div class="text-2xl font-bold text-blue-600">
+                    0ms
+                </div>
+                <p class="text-sm text-gray-600">Performance target: < 1000ms</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">P95 Response Time</h3>
+                <div class="text-2xl font-bold text-blue-600">
+                    0ms
+                </div>
+                <p class="text-sm text-gray-600">Performance target: < 2000ms</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Requests/Second</h3>
+                <div class="text-2xl font-bold text-green-600">
+                    0.0
+                </div>
+                <p class="text-sm text-gray-600">Throughput metric</p>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Error Rate</h3>
+                <div class="text-2xl font-bold text-green-600">
+                    0.00%
+                </div>
+                <p class="text-sm text-gray-600">Target: < 5%</p>
+            </div>
+        </section>
+
+        <!-- Code Quality -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Code Quality</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">ESLint Errors:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">ESLint Warnings:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">TypeScript Errors:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Security Vulnerabilities</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Critical:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">High:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Medium:</span>
+                        <span class="font-semibold text-green-600">
+                            0
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Low:</span>
+                        <span class="font-semibold text-blue-600">
+                            0
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <h3 class="text-lg font-semibold text-gray-700 mb-4">Quality Gates Status</h3>
+                <div class="space-y-2">
+                    
+      <div class="flex justify-between items-center">
+        <span class="text-gray-600">Unit Test Coverage ≥ 80%:</span>
+        <span class="font-semibold text-red-600">
+          ❌ 0%
+        </span>
+      </div>
+    
+      <div class="flex justify-between items-center">
+        <span class="text-gray-600">No Critical Security Issues:</span>
+        <span class="font-semibold text-green-600">
+          ✅ 0 critical
+        </span>
+      </div>
+    
+      <div class="flex justify-between items-center">
+        <span class="text-gray-600">Performance < 1s avg response:</span>
+        <span class="font-semibold text-green-600">
+          ✅ 0ms
+        </span>
+      </div>
+    
+      <div class="flex justify-between items-center">
+        <span class="text-gray-600">Zero TypeScript Errors:</span>
+        <span class="font-semibold text-green-600">
+          ✅ 0 errors
+        </span>
+      </div>
+    
+                </div>
+            </div>
+        </section>
+
+        <!-- Test Execution Timeline -->
+        <section class="metric-card mb-8">
+            <h3 class="text-lg font-semibold text-gray-700 mb-4">Recent Test Executions</h3>
+            <div id="timelineChart" style="height: 200px;">
+                <div class="flex items-center justify-center h-full text-gray-500">
+                    <p>Timeline chart would be implemented with real test execution data</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Coverage Chart
+        const coverageCtx = document.getElementById('coverageChart').getContext('2d');
+        new Chart(coverageCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Lines', 'Functions', 'Branches', 'Statements'],
+                datasets: [{
+                    label: 'Coverage %',
+                    data: [
+                        0,
+                        0,
+                        0,
+                        0
+                    ],
+                    backgroundColor: [
+                        '#ef4444',
+                        '#ef4444',
+                        '#ef4444',
+                        '#ef4444'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // Test Results Chart
+        const testResultsCtx = document.getElementById('testResultsChart').getContext('2d');
+        new Chart(testResultsCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Unit Tests Passed', 'Unit Tests Failed', 'Integration Tests', 'E2E Tests'],
+                datasets: [{
+                    data: [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                backgroundColor: ['#10b981', '#ef4444', '#3b82f6', '#8b5cf6']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    </script>
+</body>
+</html>

@@ -35,7 +35,7 @@ export class ProductionRedisManager {
     sets: 0,
     deletes: 0,
     errors: 0,
-    avgLatency: number
+    avgLatency: 0
   };
 
   constructor() {
@@ -56,14 +56,7 @@ export class ProductionRedisManager {
     // Primary Redis client
     this.redis = new Redis({
       ...config,
-      retryDelayOnFailover: config.retryDelayOnFailover,
-      maxRetriesPerRequest: config.maxRetriesPerRequest,
-      lazyConnect: config.lazyConnect,
-      keepAlive: config.keepAlive,
-      connectTimeout: config.connectTimeout,
-      commandTimeout: config.commandTimeout,
       reconnectOnError: true,
-      maxRetriesPerRequest: 10,
       family: 4, // IPv4
       enableOfflineQueue: false,
       enableReadyCheck: true

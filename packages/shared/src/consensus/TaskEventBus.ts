@@ -296,6 +296,7 @@ export class TaskEventBus extends EventEmitter {
     await this.publish({
       type: TaskEventType.STATE_CHANGED,
       taskId,
+      timestamp: new Date(),
       data: transition
     });
   }
@@ -309,6 +310,7 @@ export class TaskEventBus extends EventEmitter {
     await this.publish({
       type: TaskEventType.CONSENSUS_REACHED,
       taskId,
+      timestamp: new Date(),
       data: {
         agreedLabel,
         confidence,
@@ -331,6 +333,7 @@ export class TaskEventBus extends EventEmitter {
     await this.publish({
       type: TaskEventType.CONFLICT_DETECTED,
       taskId,
+      timestamp: new Date(),
       data: {
         labelCounts,
         topLabels,
@@ -350,6 +353,7 @@ export class TaskEventBus extends EventEmitter {
       type: TaskEventType.HONEYPOT_FAILED,
       taskId,
       userId,
+      timestamp: new Date(),
       data: {
         userId,
         expectedLabel,
@@ -369,6 +373,7 @@ export class TaskEventBus extends EventEmitter {
       type: TaskEventType.HONEYPOT_PASSED,
       taskId,
       userId,
+      timestamp: new Date(),
       data: {
         userId,
         accuracy,

@@ -1,0 +1,381 @@
+# Application Performance Monitoring Alerts for LabelMint
+# =======================================================
+
+groups:
+  - name: application-performance
+    interval: 30s
+    rules:
+      # Response Time Monitoring
+      - alert: HighResponseTime
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+            ) > 1
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: backend
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "High response time on {{ $labels.service }}"
+          description: "95th percentile response time is {{ $value }}s. Target is < 1s."
+          runbook_url: "https://runbooks.labelmint.it/backend/high-response-time"
+
+      - alert: CriticalResponseTime
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service)
+            ) > 3
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "Critical response time on {{ $labels.service }}"
+          description: "95th percentile response time is {{ $value }}s. Service is severely degraded!"
+          runbook_url: "https://runbooks.labelmint.it/backend/critical-response-time"
+
+      # Error Rate Monitoring
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service) /
+            sum(rate(http_requests_total[5m])) by (service) * 100
+          ) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value }}%. Target is < 5%."
+          runbook_url: "https://runbooks.labelmint.it/backend/high-error-rate"
+
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service) /
+            sum(rate(http_requests_total[5m])) by (service) * 100
+          ) > 15
+        for: 30s
+        labels:
+          severity: critical
+          team: backend
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "Critical error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value }}%. Service is failing!"
+          runbook_url: "https://runbooks.labelmint.it/backend/critical-error-rate"
+
+      # Throughput Monitoring
+      - alert: LowRequestRate
+        expr: |
+          (
+            sum(rate(http_requests_total[5m])) by (service) < 10
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: "{{ $labels.service }}"
+        annotations:
+          summary: "Low request rate on {{ $labels.service }}"
+          description: "Request rate is {{ $value }} req/s. May indicate service issues."
+          runbook_url: "https://runbooks.labelmint.it/backend/low-request-rate"
+
+      # Application Memory Usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            (process_resident_memory_bytes / 1024 / 1024) > 1000
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value }}MB. Monitor for potential memory leaks."
+          runbook_url: "https://runbooks.labelmint.it/backend/high-memory-usage"
+
+      - alert: CriticalMemoryUsage
+        expr: |
+          (
+            (process_resident_memory_bytes / 1024 / 1024) > 2000
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Critical memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value }}MB. Service may crash soon!"
+          runbook_url: "https://runbooks.labelmint.it/backend/critical-memory-usage"
+
+      # CPU Usage Monitoring
+      - alert: HighCPUUsage
+        expr: |
+          (
+            rate(process_cpu_seconds_total[5m]) * 100 > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $value }}%. Service may be overloaded."
+          runbook_url: "https://runbooks.labelmint.it/backend/high-cpu-usage"
+
+      - alert: CriticalCPUUsage
+        expr: |
+          (
+            rate(process_cpu_seconds_total[5m]) * 100 > 95
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $value }}%. Service is critically overloaded!"
+          runbook_url: "https://runbooks.labelmint.it/backend/critical-cpu-usage"
+
+  - name: database-performance
+    interval: 30s
+    rules:
+      # Database Connection Monitoring
+      - alert: HighDatabaseConnections
+        expr: |
+          (
+            pg_stat_database_numbackends > 80
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: database
+        annotations:
+          summary: "High database connection count"
+          description: "{{ $value }} active database connections. Pool may be exhausted."
+          runbook_url: "https://runbooks.labelmint.it/database/high-connections"
+
+      - alert: CriticalDatabaseConnections
+        expr: |
+          (
+            pg_stat_database_numbackends > 90
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          service: database
+        annotations:
+          summary: "Critical database connection count"
+          description: "{{ $value }} active database connections. Connection pool exhaustion!"
+          runbook_url: "https://runbooks.labelmint.it/database/critical-connections"
+
+      # Database Query Performance
+      - alert: SlowDatabaseQueries
+        expr: |
+          (
+            pg_stat_statements_mean_exec_time > 1000
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average query execution time is {{ $value }}ms. Target is < 1000ms."
+          runbook_url: "https://runbooks.labelmint.it/database/slow-queries"
+
+      - alert: CriticalSlowQueries
+        expr: |
+          (
+            pg_stat_statements_mean_exec_time > 5000
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          service: database
+        annotations:
+          summary: "Critical slow database queries"
+          description: "Average query execution time is {{ $value }}ms. Database performance severely degraded!"
+          runbook_url: "https://runbooks.labelmint.it/database/critical-slow-queries"
+
+      # Database Lock Monitoring
+      - alert: HighDatabaseLocks
+        expr: |
+          (
+            pg_locks_count > 50
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: backend
+          service: database
+        annotations:
+          summary: "High database lock count"
+          description: "{{ $value }} active database locks. Potential deadlock risk."
+          runbook_url: "https://runbooks.labelmint.it/database/high-locks"
+
+      # Database Size Monitoring
+      - alert: DatabaseGrowthRate
+        expr: |
+          (
+            increase(pg_database_size_bytes[24h]) > (10 * 1024 * 1024 * 1024)
+          )
+        for: 1h
+        labels:
+          severity: warning
+          team: backend
+          service: database
+        annotations:
+          summary: "High database growth rate"
+          description: "Database grew by {{ $value | humanize1024 }} in 24h. Monitor storage capacity."
+          runbook_url: "https://runbooks.labelmint.it/database/high-growth"
+
+  - name: cache-performance
+    interval: 60s
+    rules:
+      # Redis Performance Monitoring
+      - alert: LowRedisHitRate
+        expr: |
+          (
+            (redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)) * 100 < 80
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+          service: redis-cache
+        annotations:
+          summary: "Low Redis cache hit rate"
+          description: "Cache hit rate is {{ $value }}%. Target is > 90%."
+          runbook_url: "https://runbooks.labelmint.it/cache/low-hit-rate"
+
+      - alert: CriticalRedisHitRate
+        expr: |
+          (
+            (redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)) * 100 < 60
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+          service: redis-cache
+        annotations:
+          summary: "Critical Redis cache hit rate"
+          description: "Cache hit rate is {{ $value }}%. Cache strategy needs optimization!"
+          runbook_url: "https://runbooks.labelmint.it/cache/critical-hit-rate"
+
+      - alert: HighRedisMemoryUsage
+        expr: |
+          (
+            (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 90
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: redis-cache
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is {{ $value }}%. Risk of eviction."
+          runbook_url: "https://runbooks.labelmint.it/cache/high-memory-usage"
+
+      - alert: CriticalRedisMemoryUsage
+        expr: |
+          (
+            (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 95
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          service: redis-cache
+        annotations:
+          summary: "Critical Redis memory usage"
+          description: "Redis memory usage is {{ $value }}%. Immediate eviction risk!"
+          runbook_url: "https://runbooks.labelmint.it/cache/critical-memory-usage"
+
+      # Redis Connection Monitoring
+      - alert: HighRedisConnections
+        expr: |
+          (
+            redis_connected_clients > 100
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          service: redis-cache
+        annotations:
+          summary: "High Redis connection count"
+          description: "{{ $value }} connected Redis clients. Monitor connection pool."
+          runbook_url: "https://runbooks.labelmint.it/cache/high-connections"
+
+  - name: api-gateway-performance
+    interval: 30s
+    rules:
+      # API Gateway Specific Alerts
+      - alert: APIGatewayHighLatency
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{service="api-gateway"}[5m])) by (le)
+            ) > 2
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: backend
+          service: api-gateway
+        annotations:
+          summary: "API Gateway high latency"
+          description: "95th percentile latency is {{ $value }}s. Target is < 2s."
+          runbook_url: "https://runbooks.labelmint.it/api-gateway/high-latency"
+
+      - alert: APIGatewayRateLimitBreached
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api-gateway",status="429"}[5m])) > 10
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+          service: api-gateway
+        annotations:
+          summary: "API Gateway rate limit breached frequently"
+          description: "{{ $value }} rate limit violations per second. Review rate limits."
+          runbook_url: "https://runbooks.labelmint.it/api-gateway/rate-limit-breached"
+
+      - alert: APIGatewayAuthenticationFailures
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api-gateway",status="401"}[5m])) /
+            sum(rate(http_requests_total{service="api-gateway"}[5m])) * 100 > 5
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: security
+          service: api-gateway
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Authentication failure rate is {{ $value }}%. Possible security issue."
+          runbook_url: "https://runbooks.labelmint.it/security/auth-failures"

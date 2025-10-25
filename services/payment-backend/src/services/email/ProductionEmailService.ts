@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { Logger } from '../../utils/logger';
-import { redisManager } from '../../../cache/RedisManager';
-import { connectionPool } from '../../../database/ConnectionPool';
+import { redisManager } from '../../cache/RedisManager';
+import { connectionPool } from '../../database/ConnectionPool';
 
 const logger = new Logger('ProductionEmailService');
 

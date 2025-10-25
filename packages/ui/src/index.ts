@@ -2,6 +2,8 @@
 export { Button, buttonVariants } from './components/Button';
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './components/Card';
 export { Input } from './components/Input';
+export { TableRow, TableHead, TableCell } from './components/Table';
+
 export { ErrorBoundary, useErrorHandler, withErrorBoundary } from './components/ErrorBoundary';
 export { Tooltip } from './components/Tooltip';
 export { Badge } from './components/Badge';

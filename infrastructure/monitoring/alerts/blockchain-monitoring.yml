@@ -1,0 +1,423 @@
+# TON Blockchain Monitoring and Alerting Rules for LabelMint
+# ==========================================================
+
+groups:
+  - name: ton-node-health
+    interval: 30s
+    rules:
+      # TON Node Health Monitoring
+      - alert: TONNodeDown
+        expr: |
+          (
+            up{job="ton-blockchain"} == 0
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-node
+        annotations:
+          summary: "TON blockchain node is down"
+          description: "TON node {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/node-down"
+
+      - alert: TONNodeSyncDelay
+        expr: |
+          (
+            ton_sync_delay_seconds > 300
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-node
+        annotations:
+          summary: "TON node sync delay detected"
+          description: "TON node is {{ $value }} seconds behind blockchain"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/sync-delay"
+
+      - alert: TONNodeCriticalSyncDelay
+        expr: |
+          (
+            ton_sync_delay_seconds > 1800
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-node
+        annotations:
+          summary: "Critical TON node sync delay"
+          description: "TON node is {{ $value | humanizeDuration }} behind blockchain. Payment processing affected!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/critical-sync-delay"
+
+      - alert: TONNodeHighCPUUsage
+        expr: |
+          (
+            ton_node_cpu_usage_percent > 85
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-node
+        annotations:
+          summary: "TON node high CPU usage"
+          description: "TON node CPU usage is {{ $value }}%. Node may be overloaded"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/high-cpu"
+
+      - alert: TONNodeHighMemoryUsage
+        expr: |
+          (
+            ton_node_memory_usage_percent > 90
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-node
+        annotations:
+          summary: "TON node high memory usage"
+          description: "TON node memory usage is {{ $value }}%. Risk of node instability"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/high-memory"
+
+  - name: ton-network-monitoring
+    interval: 60s
+    rules:
+      # TON Network Performance
+      - alert: TONNetworkHighLatency
+        expr: |
+          (
+            ton_network_latency_ms > 5000
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-network
+        annotations:
+          summary: "TON network high latency"
+          description: "TON network latency is {{ $value }}ms. Transactions may be slow"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/network-latency"
+
+      - alert: TONNetworkCriticalLatency
+        expr: |
+          (
+            ton_network_latency_ms > 15000
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-network
+        annotations:
+          summary: "Critical TON network latency"
+          description: "TON network latency is {{ $value }}ms. Payment processing severely affected!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/critical-latency"
+
+      - alert: TONNetworkLowThroughput
+        expr: |
+          (
+            ton_network_transactions_per_second < 100
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-network
+        annotations:
+          summary: "TON network low throughput"
+          description: "TON network throughput is {{ $value }} tx/s. Below normal levels"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/low-throughput"
+
+      - alert: TONNetworkPartitionSuspected
+        expr: |
+          (
+            ton_connected_peers_count < 5
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-network
+        annotations:
+          summary: "TON network partition suspected"
+          description: "Only {{ $value }} connected peers. Possible network partition"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/network-partition"
+
+  - name: ton-transaction-monitoring
+    interval: 30s
+    rules:
+      # Transaction Monitoring
+      - alert: TONTransactionFailureSpike
+        expr: |
+          (
+            sum(rate(ton_transactions_failed_total[5m])) > 10
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: finance
+          service: ton-transactions
+        annotations:
+          summary: "TON transaction failure spike"
+          description: "{{ $value }} failed transactions per minute. Payment system affected!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/transaction-failures"
+
+      - alert: TONTransactionStuckInMempool
+        expr: |
+          (
+            ton_mempool_size > 1000
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-mempool
+        annotations:
+          summary: "TON mempool backlog growing"
+          description: "{{ $value }} transactions stuck in mempool. Network congestion"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/mempool-backlog"
+
+      - alert: TONGasPriceSpike
+        expr: |
+          (
+            ton_gas_price_nanotons > 1000
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: ton-gas
+        annotations:
+          summary: "TON gas price spike"
+          description: "Gas price is {{ $value }} nanotons. Transaction costs increased"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/gas-spike"
+
+      - alert: TONSlowTransactionConfirmation
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(ton_transaction_confirmation_time_seconds_bucket[10m])) by (le)
+            ) > 300
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-transactions
+        annotations:
+          summary: "Slow TON transaction confirmations"
+          description: "95th percentile confirmation time is {{ $value }}s. Target is < 60s"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/slow-confirmations"
+
+  - name: ton-smart-contract-monitoring
+    interval: 60s
+    rules:
+      # Smart Contract Monitoring
+      - alert: TONSmartContractFailure
+        expr: |
+          (
+            sum(rate(ton_smart_contract_failures_total[5m])) > 0
+          )
+        for: 0s
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-smart-contracts
+        annotations:
+          summary: "TON smart contract failure detected"
+          description: "Smart contract execution failed. Immediate investigation required!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/contract-failure"
+
+      - alert: TONContractGasExhaustion
+        expr: |
+          (
+            sum(rate(ton_contract_gas_exhausted_total[5m])) > 2
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-smart-contracts
+        annotations:
+          summary: "TON contract gas exhaustion"
+          description: "{{ $value }} contracts ran out of gas. Possible logic issues"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/gas-exhaustion"
+
+      - alert: TONContractExecutionTimeout
+        expr: |
+          (
+            sum(rate(ton_contract_timeouts_total[5m])) > 1
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-smart-contracts
+        annotations:
+          summary: "TON contract execution timeouts"
+          description: "{{ $value }} contract executions timed out"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/contract-timeout"
+
+  - name: ton-usdt-monitoring
+    interval: 30s
+    rules:
+      # USDT Token Monitoring
+      - alert: TONUSDTTransferFailure
+        expr: |
+          (
+            sum(rate(ton_usdt_transfers_failed_total[5m])) > 3
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: finance
+          service: ton-usdt
+        annotations:
+          summary: "TON USDT transfer failures"
+          description: "{{ $value }} USDT transfers failed per minute. Payment system affected!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/usdt-transfer-failures"
+
+      - alert: TONUSDTLiquidityIssue
+        expr: |
+          (
+            ton_usdt_total_supply < 1000000
+          )
+        for: 10m
+        labels:
+          severity: warning
+          team: finance
+          service: ton-usdt
+        annotations:
+          summary: "TON USDT liquidity issue"
+          description: "USDT supply is {{ $value }}. Low liquidity may affect payments"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/usdt-liquidity"
+
+      - alert: TONUSDTContractUnresponsive
+        expr: |
+          (
+            ton_usdt_contract_response_time_ms > 10000
+          )
+        for: 3m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-usdt
+        annotations:
+          summary: "TON USDT contract unresponsive"
+          description: "USDT contract response time is {{ $value }}ms. Contract may be stuck"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/usdt-unresponsive"
+
+  - name: ton-wallet-monitoring
+    interval: 60s
+    rules:
+      # Wallet Monitoring
+      - alert: TONWalletBalanceCritical
+        expr: |
+          (
+            ton_wallet_balance_nanotons < 1000000
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: finance
+          service: ton-wallet
+        annotations:
+          summary: "TON wallet balance critical"
+          description: "Hot wallet balance is {{ $value }} nanotons. Refill required!"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/wallet-balance-critical"
+
+      - alert: TONWalletBalanceLow
+        expr: |
+          (
+            ton_wallet_balance_nanotons < 5000000
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: finance
+          service: ton-wallet
+        annotations:
+          summary: "TON wallet balance low"
+          description: "Hot wallet balance is {{ $value }} nanotons. Consider refilling"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/wallet-balance-low"
+
+      - alert: TONWalletTransactionQueueBackup
+        expr: |
+          (
+            ton_wallet_transaction_queue_size > 50
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-wallet
+        annotations:
+          summary: "TON wallet transaction queue backup"
+          description: "{{ $value }} transactions queued. Wallet may be overloaded"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/wallet-queue-backup"
+
+      - alert: TONWalletFailedTransactions
+        expr: |
+          (
+            sum(rate(ton_wallet_transactions_failed_total[5m])) > 5
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-wallet
+        annotations:
+          summary: "TON wallet failed transactions"
+          description: "{{ $value }} wallet transactions failed per minute"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/wallet-failed-tx"
+
+  - name: ton-validator-monitoring
+    interval: 60s
+    rules:
+      # Validator Monitoring (if running validator)
+      - alert: TONValidatorOffline
+        expr: |
+          (
+            ton_validator_online == 0
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: blockchain
+          service: ton-validator
+        annotations:
+          summary: "TON validator is offline"
+          description: "Validator {{ $labels.instance }} is not participating in consensus"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/validator-offline"
+
+      - alert: TONValidatorLowParticipation
+        expr: |
+          (
+            ton_validator_participation_rate < 0.8
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-validator
+        annotations:
+          summary: "TON validator low participation"
+          description: "Validator participation rate is {{ $value }}. Expected > 80%"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/validator-participation"
+
+      - alert: TONValidatorMissedBlocks
+        expr: |
+          (
+            sum(rate(ton_validator_missed_blocks_total[10m])) > 2
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: blockchain
+          service: ton-validator
+        annotations:
+          summary: "TON validator missing blocks"
+          description: "{{ $value }} blocks missed in 10 minutes. Validator performance issue"
+          runbook_url: "https://runbooks.labelmint.it/blockchain/validator-missed-blocks"

@@ -1,0 +1,410 @@
+# Payment Processing Monitoring and Alerting Rules for LabelMint
+# =============================================================
+
+groups:
+  - name: payment-system-health
+    interval: 30s
+    rules:
+      # Payment System Health
+      - alert: PaymentProcessorDown
+        expr: |
+          (
+            up{job="payment-metrics"} == 0
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: finance
+          service: payment-processor
+        annotations:
+          summary: "Payment processor is down"
+          description: "Payment processor {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://runbooks.labelmint.it/payments/processor-down"
+
+      - alert: PaymentQueueBacklog
+        expr: |
+          (
+            labelmint_payment_queue_size > 100
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-queue
+        annotations:
+          summary: "Payment queue backlog growing"
+          description: "{{ $value }} payments queued. Processing may be delayed"
+          runbook_url: "https://runbooks.labelmint.it/payments/queue-backlog"
+
+      - alert: CriticalPaymentQueueBacklog
+        expr: |
+          (
+            labelmint_payment_queue_size > 500
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: finance
+          service: payment-queue
+        annotations:
+          summary: "Critical payment queue backlog"
+          description: "{{ $value }} payments queued. Payment system severely delayed!"
+          runbook_url: "https://runbooks.labelmint.it/payments/critical-queue-backlog"
+
+  - name: transaction-monitoring
+    interval: 30s
+    rules:
+      # Transaction Processing
+      - alert: LowTransactionSuccessRate
+        expr: |
+          (
+            (
+              sum(rate(labelmint_transactions_successful_total[5m])) /
+              sum(rate(labelmint_transactions_initiated_total[5m]))
+            ) * 100 < 90
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: transaction-processing
+        annotations:
+          summary: "Low transaction success rate"
+          description: "Transaction success rate is {{ $value }}%. Target is > 95%"
+          runbook_url: "https://runbooks.labelmint.it/payments/low-success-rate"
+
+      - alert: CriticalTransactionFailureRate
+        expr: |
+          (
+            (
+              sum(rate(labelmint_transactions_successful_total[5m])) /
+              sum(rate(labelmint_transactions_initiated_total[5m]))
+            ) * 100 < 70
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: finance
+          service: transaction-processing
+        annotations:
+          summary: "Critical transaction failure rate"
+          description: "Transaction success rate is {{ $value }}%. Payment system failing!"
+          runbook_url: "https://runbooks.labelmint.it/payments/critical-failure-rate"
+
+      - alert: HighTransactionFailureRate
+        expr: |
+          (
+            sum(rate(labelmint_transactions_failed_total[5m])) > 10
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: transaction-processing
+        annotations:
+          summary: "High transaction failure rate"
+          description: "{{ $value }} failed transactions per minute"
+          runbook_url: "https://runbooks.labelmint.it/payments/high-failure-rate"
+
+      - alert: SlowTransactionProcessing
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(labelmint_transaction_processing_time_seconds_bucket[5m])) by (le)
+            ) > 30
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: finance
+          service: transaction-processing
+        annotations:
+          summary: "Slow transaction processing"
+          description: "95th percentile processing time is {{ $value }}s. Target is < 10s"
+          runbook_url: "https://runbooks.labelmint.it/payments/slow-processing"
+
+  - name: usdt-payment-monitoring
+    interval: 30s
+    rules:
+      # USDT Payment Processing
+      - alert: USDTPaymentFailures
+        expr: |
+          (
+            sum(rate(labelmint_usdt_payments_failed_total[5m])) > 5
+          )
+        for: 2m
+        labels:
+          severity: critical
+          team: finance
+          service: usdt-payments
+        annotations:
+          summary: "USDT payment failures detected"
+          description: "{{ $value }} USDT payments failed per minute"
+          runbook_url: "https://runbooks.labelmint.it/payments/usdt-failures"
+
+      - alert: USDTTransferTimeout
+        expr: |
+          (
+            sum(rate(labelmint_usdt_transfer_timeouts_total[5m])) > 2
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: usdt-payments
+        annotations:
+          summary: "USDT transfer timeouts"
+          description: "{{ $value }} USDT transfers timed out"
+          runbook_url: "https://runbooks.labelmint.it/payments/usdt-timeouts"
+
+      - alert: LowUSDTBalance
+        expr: |
+          (
+            labelmint_usdt_reserve_balance < 10000
+          )
+        for: 5m
+        labels:
+          severity: critical
+          team: finance
+          service: usdt-reserve
+        annotations:
+          summary: "Low USDT reserve balance"
+          description: "USDT reserve balance is ${{ $value }}. Immediate refill required!"
+          runbook_url: "https://runbooks.labelmint.it/payments/low-usdt-balance"
+
+      - alert: USDTBalanceWarning
+        expr: |
+          (
+            labelmint_usdt_reserve_balance < 50000
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: finance
+          service: usdt-reserve
+        annotations:
+          summary: "USDT balance warning"
+          description: "USDT reserve balance is ${{ $value }}. Consider refilling soon"
+          runbook_url: "https://runbooks.labelmint.it/payments/usdt-balance-warning"
+
+  - name: escrow-monitoring
+    interval: 60s
+    rules:
+      # Escrow System Monitoring
+      - alert: EscrowBalanceMismatch
+        expr: |
+          (
+            abs(labelmint_escrow_expected_balance - labelmint_escrow_actual_balance) > 1000
+          )
+        for: 3m
+        labels:
+          severity: critical
+          team: finance
+          service: escrow-system
+        annotations:
+          summary: "Escrow balance mismatch detected"
+          description: "Expected: ${{ query \"labelmint_escrow_expected_balance\" }}, Actual: ${{ query \"labelmint_escrow_actual_balance\" }}"
+          runbook_url: "https://runbooks.labelmint.it/payments/escrow-mismatch"
+
+      - alert: HighEscrowUtilization
+        expr: |
+          (
+            (
+              labelmint_escrow_funds_locked / labelmint_escrow_total_capacity
+            ) * 100 > 90
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: finance
+          service: escrow-system
+        annotations:
+          summary: "High escrow utilization"
+          description: "Escrow utilization is {{ $value }}%. Capacity may be exceeded"
+          runbook_url: "https://runbooks.labelmint.it/payments/high-escrow-utilization"
+
+      - alert: EscrowReleaseDelays
+        expr: |
+          (
+            histogram_quantile(0.95,
+              sum(rate(labelmint_escrow_release_time_seconds_bucket[10m])) by (le)
+            ) > 300
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: finance
+          service: escrow-system
+        annotations:
+          summary: "Escrow release delays"
+          description: "95th percentile escrow release time is {{ $value }}s. Target is < 60s"
+          runbook_url: "https://runbooks.labelmint.it/payments/escrow-delays"
+
+  - name: fraud-detection
+    interval: 60s
+    rules:
+      # Fraud Detection
+      - alert: SuspiciousPaymentPattern
+        expr: |
+          (
+            sum(rate(labelmint_suspicious_payments_total[10m])) > 3
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: fraud-detection
+        annotations:
+          summary: "Suspicious payment pattern detected"
+          description: "{{ $value }} suspicious payments flagged in 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/payments/suspicious-pattern"
+
+      - alert: HighValueTransactionAlert
+        expr: |
+          (
+            max(labelmint_payment_amount_usd) > 10000
+          )
+        for: 0s
+        labels:
+          severity: warning
+          team: finance
+          service: payment-monitoring
+        annotations:
+          summary: "High value transaction detected"
+          description: "Transaction amount: ${{ $value }}. Manual review required"
+          runbook_url: "https://runbooks.labelmint.it/payments/high-value-transaction"
+
+      - alert: MultiplePaymentAttempts
+        expr: |
+          (
+            sum(rate(labelmint_payment_attempts_total[5m])) by (user_id) > 10
+          )
+        for: 2m
+        labels:
+          severity: warning
+          team: finance
+          service: fraud-detection
+        annotations:
+          summary: "Multiple payment attempts by user {{ $labels.user_id }}"
+          description: "{{ $value }} payment attempts in 5 minutes. Possible fraud"
+          runbook_url: "https://runbooks.labelmint.it/payments/multiple-attempts"
+
+      - alert: UnusualPaymentLocation
+        expr: |
+          (
+            sum(rate(labelmint_cross_border_payments_total[1h])) > 20
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: finance
+          service: fraud-detection
+        annotations:
+          summary: "Unusual cross-border payment activity"
+          description: "{{ $value }} cross-border payments in the last hour. Review required"
+          runbook_url: "https://runbooks.labelmint.it/payments/cross-border-activity"
+
+  - name: payment-method-monitoring
+    interval: 60s
+    rules:
+      # Payment Method Performance
+      - alert: PaymentMethodFailure
+        expr: |
+          (
+            sum(rate(labelmint_payment_method_failures_total[10m])) by (payment_method) > 5
+          )
+        for: 3m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-methods
+        annotations:
+          summary: "Payment method {{ $labels.payment_method }} failures"
+          description: "{{ $value }} failures for {{ $labels.payment_method }} in 10 minutes"
+          runbook_url: "https://runbooks.labelmint.it/payments/method-failure"
+
+      - alert: LowPaymentMethodUsage
+        expr: |
+          (
+            sum(rate(labelmint_payment_method_usage_total[1h])) by (payment_method)) < 1
+          )
+        for: 2h
+        labels:
+          severity: info
+          team: product
+          service: payment-methods
+        annotations:
+          summary: "Low usage of payment method {{ $labels.payment_method }}"
+          description: "{{ $labels.payment_method }} used {{ $value }} times in the last hour"
+          runbook_url: "https://runbooks.labelmint.it/payments/low-method-usage"
+
+  - name: reconciliation-monitoring
+    interval: 300s
+    rules:
+      # Payment Reconciliation
+      - alert: ReconciliationFailure
+        expr: |
+          (
+            sum(rate(labelmint_reconciliation_failures_total[1h])) > 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-reconciliation
+        annotations:
+          summary: "Payment reconciliation failures"
+          description: "{{ $value }} reconciliation failures in the last hour"
+          runbook_url: "https://runbooks.labelmint.it/payments/reconciliation-failure"
+
+      - alert: ReconciliationDelay
+        expr: |
+          (
+            labelmint_reconciliation_delay_hours > 2
+          )
+        for: 30m
+        labels:
+          severity: warning
+          team: finance
+          service: payment-reconciliation
+        annotations:
+          summary: "Payment reconciliation delay"
+          description: "Reconciliation is {{ $value }} hours behind. Financial reporting affected"
+          runbook_url: "https://runbooks.labelmint.it/payments/reconciliation-delay"
+
+  - name: chargeback-monitoring
+    interval: 300s
+    rules:
+      # Chargeback Monitoring
+      - alert: HighChargebackRate
+        expr: |
+          (
+            (
+              sum(rate(labelmint_chargebacks_total[24h])) /
+              sum(rate(labelmint_transactions_successful_total[24h]))
+            ) * 100 > 1
+          )
+        for: 1h
+        labels:
+          severity: critical
+          team: finance
+          service: chargeback-monitoring
+        annotations:
+          summary: "High chargeback rate detected"
+          description: "Chargeback rate is {{ $value }}%. Industry average is < 0.5%"
+          runbook_url: "https://runbooks.labelmint.it/payments/high-chargeback-rate"
+
+      - alert: ChargebackSpike
+        expr: |
+          (
+            sum(rate(labelmint_chargebacks_total[1h])) > 5
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: finance
+          service: chargeback-monitoring
+        annotations:
+          summary: "Chargeback spike detected"
+          description: "{{ $value }} chargebacks in the last hour. Investigation required"
+          runbook_url: "https://runbooks.labelmint.it/payments/chargeback-spike"

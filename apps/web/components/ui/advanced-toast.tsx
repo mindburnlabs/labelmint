@@ -152,8 +152,7 @@ export function AdvancedToast({
               'bg-green-500': type === 'success',
               'bg-red-500': type === 'error',
               'bg-yellow-500': type === 'warning',
-              'bg-blue-500': type === 'info',
-              'bg-blue-500': type === 'loading'
+              'bg-blue-500': type === 'info' || type === 'loading'
             }
           )} />
         </motion.div>

@@ -1,0 +1,37 @@
+# Tempo Query Configuration
+# =========================
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: info
+
+query_frontend:
+  search:
+    external_backend: s3
+    external_endpoints:
+      - s3://labelmint-traces-search-index
+  max_bytes_per_trace: 1_000_000
+
+frontend:
+  compress_responses: true
+  log_queries_longer_than: 5s
+  max_outstanding_per_tenant: 2000
+  trace_by_id:
+    query_timeout: 10s
+
+querier:
+  frontend_worker:
+    grpc_client_config:
+      max_recv_msg_size: 104857600
+  max_concurrent_queries: 20
+  trace_by_id:
+    query_timeout: 10s
+
+tracing:
+  enabled: true
+  jaeger:
+    service_name: tempo-query
+    sampler_type: probabilistic
+    sampler_param: 0.1
+    endpoint: tempo:14250

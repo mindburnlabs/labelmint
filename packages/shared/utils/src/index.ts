@@ -35,6 +35,9 @@ export * from './string/generate-id';
 // Math utilities
 export * from './math/percentage';
 
+// Logger utilities
+export * from './logger';
+
 // Re-export status colors for backward compatibility
 export const statusColors = {
   success: '#10b981',
