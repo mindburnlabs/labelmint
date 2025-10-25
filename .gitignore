@@ -177,6 +177,9 @@ temp/
 # AI Assistant files
 .claude/
 
+# Git worktrees (isolated workspaces)
+.worktrees/
+
 # Migration and temporary documentation
 *MIGRATION*
 *CONSOLIDATION*
