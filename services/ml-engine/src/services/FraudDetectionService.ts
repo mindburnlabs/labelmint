@@ -213,8 +213,8 @@ export class FraudDetectionService extends EventEmitter {
       day_of_week: now.getDay(),
       day_of_month: now.getDate(),
       month: now.getMonth() + 1,
-      is_weekend: now.getDay() === 0 || now.getDay() === 6 ? 1 : 0,
-      is_holiday: this.isHoliday(now) ? 1 : 0,
+      is_weekend: now.getDay() === 0 || now.getDay() === 6,
+      is_holiday: this.isHoliday(now),
 
       // Behavioral features (calculated from historical data)
       transaction_frequency_1h: userFeatures.transaction_frequency_1h || 0,
@@ -231,17 +231,17 @@ export class FraudDetectionService extends EventEmitter {
       ip_country: transactionData.ip_country || 'Unknown',
       ip_city: transactionData.ip_city || 'Unknown',
       device_fingerprint: transactionData.device_fingerprint || '',
-      is_new_location: userFeatures.is_new_location || 0,
+      is_new_location: userFeatures.is_new_location || false,
 
       // Wallet features
       wallet_age_days: userFeatures.wallet_age_days || 0,
       wallet_transaction_count: userFeatures.wallet_transaction_count || 0,
       wallet_total_volume: userFeatures.wallet_total_volume || 0,
-      is_new_wallet: (userFeatures.wallet_age_days || 0) < 7 ? 1 : 0,
+      is_new_wallet: (userFeatures.wallet_age_days || 0) < 7,
 
       // Risk features
-      is_high_risk_country: this.isHighRiskCountry(transactionData.ip_country || 'Unknown') ? 1 : 0,
-      is_vpn_or_proxy: transactionData.is_vpn_or_proxy || 0,
+      is_high_risk_country: this.isHighRiskCountry(transactionData.ip_country || 'Unknown'),
+      is_vpn_or_proxy: transactionData.is_vpn_or_proxy || false,
       device_risk_score: transactionData.device_risk_score || 0.5,
       ip_risk_score: transactionData.ip_risk_score || 0.5,
     };
@@ -337,7 +337,7 @@ export class FraudDetectionService extends EventEmitter {
           wallet_address: features.wallet_address,
           recipient_address: features.recipient_address,
           hour_of_day: features.hour_of_day,
-          day_of_week: features.day_of_day,
+          day_of_week: features.day_of_week,
           is_weekend: features.is_weekend,
           is_holiday: features.is_holiday,
           ip_country: features.ip_country,

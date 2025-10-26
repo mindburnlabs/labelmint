@@ -420,12 +420,12 @@ export class ModelMonitoringService extends EventEmitter {
       cpu_usage_percent: health.metrics.cpuUsage,
       performance_degradation_threshold: mlConfig.monitoring.performanceThreshold,
       drift_threshold: mlConfig.monitoring.driftThreshold,
-      resource_usage_threshold: mlConfig.monitoring.resourceUsageThreshold || 80,
+      resource_usage_threshold: 80,
       active_alerts: Array.from(this.activeAlerts.values()).filter(alert =>
         alert.message.includes(modelId)
       ),
       last_updated: health.lastCheck,
-      health_status: health.status,
+      health_status: health.status === 'unknown' ? 'warning' : health.status,
     };
   }
 
@@ -486,42 +486,30 @@ export class ModelMonitoringService extends EventEmitter {
     // Performance monitoring every minute
     const performanceTask = cron.schedule('* * * * *', async () => {
       await this.checkAllModelsPerformance();
-    }, {
-      scheduled: false,
     });
 
     this.monitoringTasks.set('performance_monitoring', performanceTask);
-    performanceTask.start();
 
     // Drift monitoring every hour
     const driftTask = cron.schedule('0 * * * *', async () => {
       await this.checkAllModelsDrift();
-    }, {
-      scheduled: false,
     });
 
     this.monitoringTasks.set('drift_monitoring', driftTask);
-    driftTask.start();
 
     // Health check every 5 minutes
     const healthTask = cron.schedule('*/5 * * * *', async () => {
       await this.performHealthChecks();
-    }, {
-      scheduled: false,
     });
 
     this.monitoringTasks.set('health_checks', healthTask);
-    healthTask.start();
 
     // Alert cleanup every hour
     const cleanupTask = cron.schedule('0 * * * *', async () => {
       await this.cleanupOldAlerts();
-    }, {
-      scheduled: false,
     });
 
     this.monitoringTasks.set('alert_cleanup', cleanupTask);
-    cleanupTask.start();
 
     mlLogger.modelMonitoring('Monitoring tasks started');
   }

@@ -329,7 +329,7 @@ export class PredictiveAnalyticsService extends EventEmitter {
       return {
         job_id: jobId,
         status: 'failed',
-        errors: [error.message],
+        errors: [error instanceof Error ? error.message : String(error)],
       };
     }
   }
@@ -548,12 +548,9 @@ export class PredictiveAnalyticsService extends EventEmitter {
     if (mlConfig.training.autoRetraining.enabled) {
       const task = cron.schedule(mlConfig.training.autoRetraining.schedule, async () => {
         await this.retrainModels();
-      }, {
-        scheduled: false,
       });
 
       this.scheduledJobs.set('model_retraining', task);
-      task.start();
 
       mlLogger.prediction('Model retraining scheduled', {
         schedule: mlConfig.training.autoRetraining.schedule,
@@ -563,12 +560,9 @@ export class PredictiveAnalyticsService extends EventEmitter {
     // Schedule periodic predictions
     const predictionTask = cron.schedule('0 */6 * * *', async () => {
       await this.runPeriodicPredictions();
-    }, {
-      scheduled: false,
     });
 
     this.scheduledJobs.set('periodic_predictions', predictionTask);
-    predictionTask.start();
 
     mlLogger.prediction('Periodic predictions scheduled', {
       schedule: 'every 6 hours',
@@ -577,12 +571,9 @@ export class PredictiveAnalyticsService extends EventEmitter {
     // Schedule cache cleanup
     const cleanupTask = cron.schedule('0 */2 * * *', async () => {
       this.cleanupCache();
-    }, {
-      scheduled: false,
     });
 
     this.scheduledJobs.set('cache_cleanup', cleanupTask);
-    cleanupTask.start();
   }
 
   /**
@@ -801,7 +792,7 @@ export class PredictiveAnalyticsService extends EventEmitter {
       type: model.getConfig().modelType,
       isTrained: model.isModelTrained(),
       metrics: model.getMetrics(),
-      lastTrained: model.getConfig().lastTrainedAt,
+      lastTrained: undefined, // This would be stored in model metadata
     }));
   }
 

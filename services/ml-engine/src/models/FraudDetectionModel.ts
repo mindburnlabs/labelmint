@@ -13,7 +13,7 @@ import {
   MLModelConfig,
   ModelMetrics
 } from '@/types/ml.types';
-import { mlConfig } from '@/config/ml.config';
+import { mlConfig, MODEL_TEMPLATES } from '@/config/ml.config';
 
 interface FraudDetectionModelConfig {
   inputFeatures: string[];
@@ -36,15 +36,15 @@ export class FraudDetectionModel {
 
   constructor(config: Partial<FraudDetectionModelConfig> = {}) {
     this.config = {
-      inputFeatures: mlConfig.MODEL_TEMPLATES.fraudDetection.features as string[],
-      hiddenLayers: mlConfig.MODEL_TEMPLATES.fraudDetection.hyperparameters.hiddenLayers as number[],
-      dropoutRate: mlConfig.MODEL_TEMPLATES.fraudDetection.hyperparameters.dropout as number,
-      learningRate: mlConfig.MODEL_TEMPLATES.fraudDetection.hyperparameters.learningRate as number,
-      batchSize: mlConfig.MODEL_TEMPLATES.fraudDetection.hyperparameters.batchSize as number,
-      epochs: mlConfig.MODEL_TEMPLATES.fraudDetection.hyperparameters.epochs as number,
-      validationSplit: mlConfig.MODEL_TEMPLATES.fraudDetection.validationSplit,
+      inputFeatures: [...MODEL_TEMPLATES.fraudDetection.features],
+      hiddenLayers: [...MODEL_TEMPLATES.fraudDetection.hyperparameters.hiddenLayers],
+      dropoutRate: MODEL_TEMPLATES.fraudDetection.hyperparameters.dropout as number,
+      learningRate: MODEL_TEMPLATES.fraudDetection.hyperparameters.learningRate as number,
+      batchSize: MODEL_TEMPLATES.fraudDetection.hyperparameters.batchSize as number,
+      epochs: MODEL_TEMPLATES.fraudDetection.hyperparameters.epochs as number,
+      validationSplit: mlConfig.training.validationSplit,
       earlyStoppingPatience: mlConfig.training.earlyStoppingPatience,
-      threshold: mlConfig.MODEL_TEMPLATES.fraudDetection.threshold as number,
+      threshold: MODEL_TEMPLATES.fraudDetection.threshold as number,
       ...config,
     };
 
@@ -235,7 +235,7 @@ export class FraudDetectionModel {
       });
 
       // Training configuration
-      const trainConfig: tf.ModelFitConfig = {
+      const trainConfig = {
         epochs: this.config.epochs,
         batchSize: this.config.batchSize,
         validationSplit: this.config.validationSplit,
@@ -247,7 +247,7 @@ export class FraudDetectionModel {
             restoreBestWeights: true,
           }),
           {
-            onEpochEnd: async (epoch, logs) => {
+            onEpochEnd: async (epoch: number, logs: any) => {
               if (epoch % 10 === 0) {
                 logger.info('Training progress', {
                   epoch,

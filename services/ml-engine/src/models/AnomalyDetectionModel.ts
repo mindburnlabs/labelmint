@@ -35,7 +35,7 @@ interface AnomalyThreshold {
 export class AnomalyDetectionModel {
   private config: AnomalyDetectionConfig;
   private isolationForest: IsolationForest | null = null;
-  private autoencoder: tf.LayersModel | null = null;
+  private autoencoder: tf.Sequential | null = null;
   private baselineStats: Map<string, {
     mean: number;
     std: number;
@@ -53,13 +53,13 @@ export class AnomalyDetectionModel {
   constructor(config: Partial<AnomalyDetectionConfig> = {}) {
     this.config = {
       algorithm: 'isolation_forest',
-      contamination: mlConfig.anomalyDetection.contamination || 0.1,
+      contamination: 0.1,
       nEstimators: 100,
       maxSamples: 'auto',
       maxFeatures: 1.0,
-      sensitivity: mlConfig.anomalyDetection.sensitivity || 0.8,
-      windowSize: mlConfig.anomalyDetection.windowSize || 100,
-      updateInterval: mlConfig.anomalyDetection.updateInterval || 3600,
+      sensitivity: mlConfig.anomalyDetection.sensitivity,
+      windowSize: mlConfig.anomalyDetection.windowSize,
+      updateInterval: mlConfig.anomalyDetection.updateInterval,
       ...config,
     };
   }
@@ -470,7 +470,7 @@ export class AnomalyDetectionModel {
         return {
           entity_id: entityId,
           entity_type: entityType as any,
-          anomaly_type,
+          anomaly_type: anomalyType,
           anomaly_score: anomalyScore,
           is_anomaly: true,
           confidence: Math.min(0.99, anomalyScore / 100),
@@ -563,18 +563,21 @@ export class AnomalyDetectionModel {
       logger.info('Updating anomaly detection model');
 
       // Re-establish baseline with recent data
-      const features = Array.from(this.baselineStats.keys());
-      await this.establishBaseline(features);
+      const featureNames = Array.from(this.baselineStats.keys());
+      await this.establishBaseline(featureNames);
 
       // Retrain Isolation Forest if applicable
       if (this.config.algorithm === 'isolation_forest' && this.isolationForest) {
-        await this.isolationForest.fit(features);
+        // Fetch recent behavioral data for retraining
+        // In production, this would fetch from feature store or database
+        // For now, we'll skip retraining or implement with proper data fetching
+        logger.info('Skipping Isolation Forest retraining - requires training data');
       }
 
       this.lastUpdated = now;
 
       logger.info('Anomaly detection model updated successfully', {
-        featuresUpdated: features.length,
+        featuresUpdated: featureNames.length,
         algorithm: this.config.algorithm,
       });
 

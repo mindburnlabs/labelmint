@@ -22,7 +22,6 @@ export class FeatureStoreService {
       password: mlConfig.redis.password,
       db: mlConfig.redis.db,
       maxRetriesPerRequest: mlConfig.redis.maxRetriesPerRequest,
-      retryDelayOnFailover: mlConfig.redis.retryDelayOnFailover,
       enableOfflineQueue: mlConfig.redis.enableOfflineQueue,
     });
 
@@ -276,7 +275,7 @@ export class FeatureStoreService {
         };
       }
 
-      const values = features.map(f => {
+      const values = features.map((f: any) => {
         try {
           return JSON.parse(f.feature_value);
         } catch {
@@ -284,23 +283,23 @@ export class FeatureStoreService {
         }
       });
 
-      const nullCount = values.filter(v => v === null || v === undefined).length;
-      const validValues = values.filter(v => v !== null && v !== undefined);
+      const nullCount = values.filter((v: any) => v === null || v === undefined).length;
+      const validValues = values.filter((v: any) => v !== null && v !== undefined);
 
       // Determine if feature is numeric or categorical
-      const numericValues = validValues.filter(v => typeof v === 'number');
+      const numericValues = validValues.filter((v: any) => typeof v === 'number') as number[];
       const isNumeric = numericValues.length > validValues.length * 0.8;
 
       let stats: any = {
         count: features.length,
         null_count: nullCount,
-        last_updated: new Date(Math.max(...features.map(f => f.updated_at.getTime()))),
+        last_updated: new Date(Math.max(...features.map((f: any) => f.updated_at.getTime()))),
       };
 
       if (isNumeric && numericValues.length > 0) {
-        numericValues.sort((a, b) => a - b);
-        const mean = numericValues.reduce((sum, v) => sum + v, 0) / numericValues.length;
-        const variance = numericValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / numericValues.length;
+        numericValues.sort((a: number, b: number) => a - b);
+        const mean = numericValues.reduce((sum: number, v: number) => sum + v, 0) / numericValues.length;
+        const variance = numericValues.reduce((sum: number, v: number) => sum + Math.pow(v - mean, 2), 0) / numericValues.length;
 
         stats.numeric_stats = {
           min: numericValues[0],

@@ -184,7 +184,7 @@ export const validateUserRateLimit = (maxRequests: number = 100, windowMs: numbe
   const requests = new Map<string, { count: number; resetTime: number }>();
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.headers['x-user-id'] as string || req.ip;
+    const userId = (req.headers['x-user-id'] as string) || req.ip || 'unknown';
     const now = Date.now();
 
     if (!requests.has(userId)) {

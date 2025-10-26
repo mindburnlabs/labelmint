@@ -33,7 +33,7 @@ interface TrainingData {
 
 export class PredictiveAnalyticsModel {
   private config: PredictiveModelConfig;
-  private model: tf.LayersModel | null = null;
+  private model: tf.Sequential | null = null;
   private isTrained = false;
   private featureNormalizationParams: Map<string, { min: number; max: number; mean: number; std: number }> = new Map();
   private featureImportance: Map<string, number> = new Map();
@@ -816,7 +816,7 @@ export class PredictiveAnalyticsModel {
    */
   async loadModel(path: string): Promise<void> {
     try {
-      this.model = await tf.loadLayersModel(`file://${path}`);
+      this.model = await tf.loadLayersModel(`file://${path}`) as tf.Sequential;
 
       // Load metadata
       const metadata = JSON.parse(

@@ -334,7 +334,7 @@ router.post('/models/:modelType/retrain', async (req: Request, res: Response) =>
     mlLogger.prediction('Model retraining triggered', {
       modelType,
       force,
-      triggeredBy: req.user?.id || 'unknown',
+      triggeredBy: (req.user as any)?.id ?? 'unknown',
     });
 
     // In a real implementation, this would trigger actual model retraining

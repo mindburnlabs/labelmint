@@ -329,7 +329,7 @@ router.post('/config/threshold', async (req: Request, res: Response) => {
     // Update configuration (this would update the actual config in production)
     mlLogger.fraudDetection('Fraud detection thresholds updated', {
       thresholds: { medium, high, critical },
-      updatedBy: req.user?.id || 'unknown',
+      updatedBy: (req.user as any)?.id ?? 'unknown',
     });
 
     res.json({

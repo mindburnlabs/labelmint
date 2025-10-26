@@ -230,13 +230,16 @@ router.post('/analyze-system', async (req: Request, res: Response) => {
 
     const processingTime = Date.now() - startTime;
 
+    const anomalyScores = anomalies.map(a => a.anomaly_score);
+    const maxAnomalyScore = anomalyScores.length > 0 ? Math.max(...anomalyScores) : 0;
+
     const summary = {
       total_anomalies: anomalies.length,
-      system_health_score: anomalies.length === 0 ? 100 : Math.max(0, 100 - Math.max(...anomalies.map(a => a.anomaly_score))),
+      system_health_score: anomalies.length === 0 ? 100 : Math.max(0, 100 - maxAnomalyScore),
       performance_impact: anomalies.map(a => ({
         metric: a.affected_metrics.join(', '),
         impact_score: a.anomaly_score,
-        recommendation: this.getSystemRecommendation(a),
+        recommendation: getSystemRecommendation(a),
       })),
     };
 
@@ -435,7 +438,7 @@ router.post('/models/:modelName/update', async (req: Request, res: Response) => 
     mlLogger.anomalyDetection('Model update triggered', {
       modelName,
       force,
-      triggeredBy: req.user?.id || 'unknown',
+      triggeredBy: (req.user as any)?.id ?? 'unknown',
     });
 
     // Trigger model update

@@ -237,7 +237,7 @@ export class AnomalyDetectionService extends EventEmitter {
       await featureStore.updateFeatures(transactionId, 'transaction', numericFeatures, true);
 
       // Detect anomalies
-      const anomalies = await model.detectAnomalies(transactionId, 'transaction', numericFeatures);
+      const anomalies = await model.detectAnomalies(transactionId, 'transaction', numericFeatures as any);
 
       // Store and emit events
       if (anomalies.length > 0) {
@@ -283,7 +283,7 @@ export class AnomalyDetectionService extends EventEmitter {
 
     try {
       const entityName = 'system_main';
-      const anomalies = await model.detectAnomalies(entityName, 'session', metrics);
+      const anomalies = await model.detectAnomalies(entityName, 'session', metrics as any);
 
       if (anomalies.length > 0) {
         this.storeAnomalies(entityName, anomalies);

@@ -32,7 +32,8 @@
   },
   "include": [
     "src/**/*",
-    "src/**/*.json"
+    "src/**/*.json",
+    "src/types/express.d.ts"
   ],
   "exclude": [
     "node_modules",
